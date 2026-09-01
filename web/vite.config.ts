@@ -3,7 +3,8 @@ import { svelte } from '@sveltejs/vite-plugin-svelte';
 import svelteConfig from './svelte.config.js';
 
 export default defineConfig({
-  root: 'src/web',
+  root: 'src',
   plugins: [svelte(svelteConfig)],
-  build: { outDir: '../../dist/web', emptyOutDir: true }
+  build: { outDir: '../dist', emptyOutDir: true },
+  server: { proxy: { '/api': 'http://localhost:5177' } }
 });

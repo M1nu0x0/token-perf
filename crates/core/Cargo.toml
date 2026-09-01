@@ -1,0 +1,15 @@
+[package]
+name = "token-perf-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+axum = "0.8"
+tokio = { version = "1", features = ["rt-multi-thread", "net", "macros"] }
+rust-embed = "8"
+rusqlite = { version = "0.40.2", features = ["bundled"] }
