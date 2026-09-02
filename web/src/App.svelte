@@ -100,7 +100,7 @@
       {/if}
     </p>
     <table>
-      <thead><tr><th>{m.colLength}</th><th>{m.colCount}</th><th>{m.colRebought}</th></tr></thead>
+      <thead><tr><th>LENGTH</th><th>SESSIONS</th><th>RATIO</th></tr></thead>
       <tbody>
         {#each tldr.amplification as b (b.min)}
           <tr><td>{m.bucket(b)}</td><td class="n">{b.sessions}</td><td class="n">{m.times(b.ratio.toFixed(1))}</td></tr>
@@ -115,7 +115,7 @@
 
     <h3>{m.topHeading}</h3>
     <table>
-      <thead><tr><th>{m.colConversation}</th><th>{m.colCalls}</th><th>{m.colRebilled}</th></tr></thead>
+      <thead><tr><th>SESSION</th><th>CALLS</th><th>RESIDUAL</th></tr></thead>
       <tbody>
         {#each tldr.top_sessions as s (s.session)}
           <tr onclick={() => open(s.session)}><td>{s.title}</td><td class="n">{s.call_count}</td><td class="n">{human(s.residual)}</td></tr>
@@ -136,7 +136,7 @@
       <label><input type="checkbox" bind:checked={showAll} /> {m.includeSubagents}</label>
     </h2>
     <table>
-      <thead><tr><th>{m.colDate}</th><th>{m.colSession}</th><th>{m.colCalls}</th><th>{m.colCacheRead}</th><th>{m.colOutput}</th></tr></thead>
+      <thead><tr><th>DATE</th><th>SESSION</th><th>CALLS</th><th>CACHE_RD</th><th>OUTPUT</th></tr></thead>
       <tbody>
         {#each visible.slice(0, 50) as s (s.session)}
           <tr class:active={selected?.session === s.session} onclick={() => open(s.session)}>
@@ -183,7 +183,7 @@
 
       <h3>{m.toolResidual}</h3>
       <table>
-        <thead><tr><th>{m.colTool}</th><th>{m.colCalls}</th><th>{m.colAdded}</th><th>{m.colResidual}</th></tr></thead>
+        <thead><tr><th>TOOL</th><th>CALLS</th><th>ADDED</th><th>RESIDUAL</th></tr></thead>
         <tbody>
           {#each selected.tools.slice(0, 15) as t (t.name)}
             <tr><td>{t.name}</td><td class="n">{t.calls}</td><td class="n">{human(t.added)}</td><td class="n">{human(t.residual)}</td></tr>

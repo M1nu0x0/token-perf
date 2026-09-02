@@ -12,9 +12,6 @@ const en = {
   lengthIntro: 'Whatever comes in once is carried along on every call until the conversation ends.',
   lengthCompare: (short: string, long: string) =>
     ` Short conversations buy it back ${short} times, long ones <b>${long} times</b>.`,
-  colLength: 'Conversation length',
-  colCount: 'Count',
-  colRebought: 'Times the same content was bought again',
   times: (n: string) => `${n}x`,
   bucket: ({ min, max }: Bucket) =>
     max === null ? `${min}+ calls` : min === 0 ? `${max} calls or fewer` : `${min}–${max} calls`,
@@ -23,9 +20,6 @@ const en = {
     ' — that is their share of everything tools pushed into the conversation. ' +
     'Call the big-output tools less, or trim their output, and it drops right away.',
   topHeading: 'The three most expensive conversations',
-  colConversation: 'Conversation',
-  colCalls: 'Calls',
-  colRebilled: 'Tokens billed again',
   soloHeading: 'One at a time',
   soloLine: (pct: string) =>
     `<b>${pct}%</b> of the messages that used a tool called exactly one. ` +
@@ -33,10 +27,6 @@ const en = {
   sessionsHeading: 'Sessions',
   byCacheRead: 'by cache re-read',
   includeSubagents: 'include subagents',
-  colDate: 'Date',
-  colSession: 'Session',
-  colCacheRead: 'Cache re-read',
-  colOutput: 'Output',
   subagent: 'subagent',
   depth: (n: number) => ` · depth ${n}`,
   totals: (calls: number, output: string, read: string) =>
@@ -47,9 +37,6 @@ const en = {
     `Cache writes — 5 min ${write5m} · 1 hour ${write1h} (1 hour costs twice the input rate)`,
   failedCalls: (n: number) => `${n} failed or interrupted calls`,
   toolResidual: 'Residual cost per tool',
-  colTool: 'Tool',
-  colAdded: 'Added',
-  colResidual: 'Re-billed',
   pickSession: 'Pick a session.',
 };
 
@@ -64,9 +51,6 @@ const ko: typeof en = {
   lengthIntro: '한 번 들어온 내용은 대화가 끝날 때까지 매번 다시 실려 갑니다.',
   lengthCompare: (short, long) =>
     ` 짧은 대화는 ${short}번, 긴 대화는 <b>${long}번</b> 다시 사는 셈이에요.`,
-  colLength: '대화 길이',
-  colCount: '개수',
-  colRebought: '같은 내용을 다시 산 횟수',
   times: (n) => `${n}번`,
   bucket: ({ min, max }) =>
     max === null ? `${min}회 이상` : min === 0 ? `${max}회 이하` : `${min}~${max}회`,
@@ -74,9 +58,6 @@ const ko: typeof en = {
   culpritTail:
     ' — 툴이 대화에 밀어 넣은 양 중 이만큼을 차지해요. 결과가 큰 툴을 덜 부르거나 잘라 쓰면 바로 줄어듭니다.',
   topHeading: '제일 비쌌던 대화 셋',
-  colConversation: '대화',
-  colCalls: '호출',
-  colRebilled: '다시 청구된 토큰',
   soloHeading: '한 번에 하나씩',
   soloLine: (pct) =>
     `툴을 쓴 메시지의 <b>${pct}%</b>가 툴을 딱 하나만 불렀어요. ` +
@@ -84,10 +65,6 @@ const ko: typeof en = {
   sessionsHeading: '세션',
   byCacheRead: '캐시 재읽기 순',
   includeSubagents: '서브에이전트 포함',
-  colDate: '날짜',
-  colSession: '세션',
-  colCacheRead: '캐시 재읽기',
-  colOutput: '출력',
   subagent: '서브에이전트',
   depth: (n) => ` · 깊이 ${n}`,
   totals: (calls, output, read) =>
@@ -97,9 +74,6 @@ const ko: typeof en = {
     `캐시 쓰기 — 5분 ${write5m} · 1시간 ${write1h} (1시간은 입력 단가의 2배)`,
   failedCalls: (n) => `실패·중단된 호출 ${n}회`,
   toolResidual: '툴별 잔류 비용',
-  colTool: '툴',
-  colAdded: '추가',
-  colResidual: '재청구',
   pickSession: '세션을 고르세요.',
 };
 
@@ -114,9 +88,6 @@ const ja: typeof en = {
   lengthIntro: '一度コンテキストに入った内容は、会話が終わるまで呼び出しのたびに運ばれ続けます。',
   lengthCompare: (short, long) =>
     ` 短い会話では ${short} 回、長い会話では <b>${long} 回</b>も買い直している計算です。`,
-  colLength: '会話の長さ',
-  colCount: '件数',
-  colRebought: '同じ内容を買い直した回数',
   times: (n) => `${n} 回`,
   bucket: ({ min, max }) =>
     max === null ? `${min} 回以上` : min === 0 ? `${max} 回以下` : `${min} 〜 ${max} 回`,
@@ -124,9 +95,6 @@ const ja: typeof en = {
   culpritTail:
     ' — ツールが会話に押し込んだ量のうち、この割合を占めています。出力の大きいツールを呼ぶ回数を減らすか、出力そのものを切り詰めれば、すぐに減ります。',
   topHeading: '最も高くついた会話 3 件',
-  colConversation: '会話',
-  colCalls: '呼び出し',
-  colRebilled: '再請求されたトークン',
   soloHeading: '一度にひとつずつ',
   soloLine: (pct) =>
     `ツールを使ったメッセージの <b>${pct}%</b> が、1つしか呼んでいません。` +
@@ -134,10 +102,6 @@ const ja: typeof en = {
   sessionsHeading: 'セッション',
   byCacheRead: 'キャッシュ再読み取り順',
   includeSubagents: 'サブエージェントを含む',
-  colDate: '日付',
-  colSession: 'セッション',
-  colCacheRead: 'キャッシュ再読み取り',
-  colOutput: '出力',
   subagent: 'サブエージェント',
   depth: (n) => ` · 深さ ${n}`,
   totals: (calls, output, read) =>
@@ -147,9 +111,6 @@ const ja: typeof en = {
     `キャッシュ書き込み — 5分 ${write5m} · 1時間 ${write1h} (1時間は入力単価の2倍)`,
   failedCalls: (n) => `失敗または中断した呼び出し ${n} 回`,
   toolResidual: 'ツール別の持ち越しコスト',
-  colTool: 'ツール',
-  colAdded: '追加分',
-  colResidual: '再請求',
   pickSession: 'セッションを選んでください。',
 };
 
