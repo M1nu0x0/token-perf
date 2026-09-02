@@ -8,6 +8,7 @@ edition = "2024"
 rust-version = "1.87"
 license = "MIT"
 repository = "https://github.com/M1nu0x0/token-perf"
+readme = "README.md"
 
 [workspace.dependencies]
-token-perf-core = { path = "crates/core" }
+token-perf-core = { path = "crates/core", version = "0.1.0" }

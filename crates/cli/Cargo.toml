@@ -1,10 +1,12 @@
 [package]
 name = "token-perf"
+description = "Command-line tool that reads local coding-agent logs and attributes token waste to each tool"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
+readme.workspace = true
 
 [[bin]]
 name = "token-perf"
