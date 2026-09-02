@@ -39,6 +39,15 @@ enum Command {
         #[arg(long, default_value_t = 15)]
         top: usize,
     },
+    /// Aggregate every session, most re-billed first
+    Summary {
+        /// Earliest session date to include (YYYY-MM-DD)
+        #[arg(long)]
+        since: Option<String>,
+        /// Latest session date to include (YYYY-MM-DD)
+        #[arg(long)]
+        until: Option<String>,
+    },
     /// Start the web UI and open it in a browser
     Serve {
         /// Port to bind. Omit and the OS picks a free one
@@ -48,6 +57,28 @@ enum Command {
         #[arg(long)]
         no_open: bool,
     },
+}
+
+/// Format only: month and day ranges, not whether the day exists in that month.
+fn valid_date(v: &str) -> bool {
+    let b = v.as_bytes();
+    if b.len() != 10 || b[4] != b'-' || b[7] != b'-' {
+        return false;
+    }
+    if !([0, 1, 2, 3, 5, 6, 8, 9].iter()).all(|&i| b[i].is_ascii_digit()) {
+        return false;
+    }
+    let two = |i: usize| (b[i] - b'0') * 10 + (b[i + 1] - b'0');
+    (1..=12).contains(&two(5)) && (1..=31).contains(&two(8))
+}
+
+/// ISO 8601 sorts lexicographically, so the date prefix compares as a date.
+/// Comparing the prefix and not the whole stamp keeps `until` inclusive.
+fn in_range(started_at: &str, since: Option<&str>, until: Option<&str>) -> bool {
+    let Some(day) = started_at.get(..10) else {
+        return since.is_none() && until.is_none();
+    };
+    since.is_none_or(|s| day >= s) && until.is_none_or(|u| day <= u)
 }
 
 fn supported(code: &str) -> Option<&'static str> {
@@ -283,6 +314,73 @@ fn main() {
             }
         }
 
+        Command::Summary { since, until } => {
+            for value in [&since, &until].into_iter().flatten() {
+                if !valid_date(value) {
+                    eprintln!("{}", t!("bad_date", value = value));
+                    std::process::exit(1);
+                }
+            }
+            let mut sessions = sessions;
+            sessions.retain(|s| in_range(&s.started_at, since.as_deref(), until.as_deref()));
+            if sessions.is_empty() {
+                println!("{}", t!("summary_empty"));
+                return;
+            }
+
+            let d = analyze::tldr(&sessions);
+            println!(
+                "{}",
+                t!("summary_lead", sessions = d.sessions, calls = d.calls)
+            );
+            println!(
+                "{}",
+                t!(
+                    "summary_cache_read",
+                    pct = format!("{:.0}", d.cache_read_pct),
+                    output = human(d.totals.output),
+                    cache_read = human(d.totals.cache_read)
+                )
+            );
+            println!();
+
+            println!("{}", t!("summary_length"));
+            println!("  {:<38} {:>10} {:>7}", "LENGTH", "SESSIONS", "RATIO");
+            for b in &d.amplification {
+                let label = match b.max {
+                    Some(max) => format!("{}-{}", b.min, max),
+                    None => format!("{}+", b.min),
+                };
+                println!("  {:<38} {:>10} {:>6.1}x", label, b.sessions, b.ratio);
+            }
+            println!();
+
+            println!("{}", t!("summary_tools"));
+            println!("  {:<38} {:>10} {:>7}", "TOOL", "ADDED", "SHARE");
+            for t in &d.top_tools {
+                println!("  {:<38} {:>10} {:>6.0}%", t.name, human(t.added), t.pct);
+            }
+            println!();
+
+            println!("{}", t!("summary_top_sessions"));
+            println!("  {:<8} {:>6} {:>10}  TITLE", "ID", "CALLS", "RESIDUAL");
+            for s in &d.top_sessions {
+                println!(
+                    "  {:<8} {:>6} {:>10}  {}",
+                    short(&s.session),
+                    s.call_count,
+                    human(s.residual),
+                    s.title
+                );
+            }
+            println!();
+
+            println!(
+                "{}",
+                t!("summary_solo", pct = format!("{:.0}", d.solo_tool_pct))
+            );
+        }
+
         Command::Serve { port, no_open } => serve(sessions, lang, port.unwrap_or(0), !no_open),
     }
 }
@@ -349,7 +447,45 @@ fn human(n: u64) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{env_lang, resolve_lang, split_lang_flag};
+    use super::{env_lang, in_range, resolve_lang, split_lang_flag, valid_date};
+
+    #[test]
+    fn a_range_includes_both_of_its_end_days_whole() {
+        let day = |d: &str| format!("{d}T23:59:59.999Z");
+        assert!(in_range(
+            &day("2026-08-01"),
+            Some("2026-08-01"),
+            Some("2026-08-31")
+        ));
+        assert!(in_range(
+            &day("2026-08-31"),
+            Some("2026-08-01"),
+            Some("2026-08-31")
+        ));
+        assert!(!in_range(&day("2026-07-31"), Some("2026-08-01"), None));
+        assert!(!in_range(&day("2026-09-01"), None, Some("2026-08-31")));
+    }
+
+    #[test]
+    fn without_bounds_everything_stays_but_a_bound_drops_the_undated() {
+        assert!(in_range("", None, None));
+        assert!(in_range("2026-08", None, None));
+        assert!(!in_range("", Some("2026-08-01"), None));
+        assert!(!in_range("2026-08", None, Some("2026-08-31")));
+    }
+
+    #[test]
+    fn a_date_is_ten_characters_of_yyyy_mm_dd() {
+        assert!(valid_date("2026-08-01"));
+        // Format only: the calendar itself is not checked.
+        assert!(valid_date("2026-02-31"));
+        assert!(!valid_date("2026-13-99"));
+        assert!(!valid_date("2026-00-01"));
+        assert!(!valid_date("2026-8-1"));
+        assert!(!valid_date("2026/08/01"));
+        assert!(!valid_date("2026-08-01T00:00:00Z"));
+        assert!(!valid_date(""));
+    }
 
     #[test]
     fn the_flag_beats_the_setting_and_the_setting_beats_the_environment() {
