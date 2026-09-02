@@ -108,10 +108,10 @@ const ja: typeof en = {
   tabSessions: 'セッション',
   lead: (sessions, calls) => `セッション ${sessions} 件、呼び出し ${calls} 回を見てみました。`,
   cacheRead: (pct, output, read) =>
-    `あなたのトークンの <b>${pct}%</b> は、すでに読んだものをもう一度読むために使われました。` +
+    `トークンの <b>${pct}%</b> が、すでに読んだ内容をもう一度読むために使われています。` +
     `新しく話したのは ${output} だけなのに、読み直したのは ${read} です。`,
   lengthHeading: '会話が長いほど、同じものを何度も買うことになります',
-  lengthIntro: '一度入った内容は、会話が終わるまで毎回いっしょに運ばれます。',
+  lengthIntro: '一度コンテキストに入った内容は、会話が終わるまで呼び出しのたびに運ばれ続けます。',
   lengthCompare: (short, long) =>
     ` 短い会話では ${short} 回、長い会話では <b>${long} 回</b>も買い直している計算です。`,
   colLength: '会話の長さ',
@@ -119,36 +119,36 @@ const ja: typeof en = {
   colRebought: '同じ内容を買い直した回数',
   times: (n) => `${n} 回`,
   bucket: ({ min, max }) =>
-    max === null ? `${min} 回以上` : min === 0 ? `${max} 回以下` : `${min}〜${max} 回`,
-  culpritHeading: '膨らませた犯人',
+    max === null ? `${min} 回以上` : min === 0 ? `${max} 回以下` : `${min} 〜 ${max} 回`,
+  culpritHeading: '会話を膨らませた犯人',
   culpritTail:
-    ' — ツールが会話に押し込んだ量のうち、これだけを占めています。出力の大きいツールを呼ぶ回数を減らすか、切り詰めればすぐ減ります。',
+    ' — ツールが会話に押し込んだ量のうち、この割合を占めています。出力の大きいツールを呼ぶ回数を減らすか、出力そのものを切り詰めれば、すぐに減ります。',
   topHeading: '最も高くついた会話 3 件',
   colConversation: '会話',
   colCalls: '呼び出し',
   colRebilled: '再請求されたトークン',
   soloHeading: '一度にひとつずつ',
   soloLine: (pct) =>
-    `ツールを使ったメッセージの <b>${pct}%</b> が、ツールをひとつしか呼んでいません。` +
+    `ツールを使ったメッセージの <b>${pct}%</b> が、1つしか呼んでいません。` +
     'まとめて呼べばその分だけ往復が減り、往復が減れば読み直す量も減ります。',
   sessionsHeading: 'セッション',
-  byCacheRead: 'キャッシュ再読み込み順',
+  byCacheRead: 'キャッシュ再読み取り順',
   includeSubagents: 'サブエージェントを含む',
   colDate: '日付',
   colSession: 'セッション',
-  colCacheRead: 'キャッシュ再読み込み',
+  colCacheRead: 'キャッシュ再読み取り',
   colOutput: '出力',
   subagent: 'サブエージェント',
   depth: (n) => ` · 深さ ${n}`,
   totals: (calls, output, read) =>
-    `呼び出し ${calls} 回 · 出力 ${output} · キャッシュ再読み込み <b>${read}</b>`,
-  baseline: (baseline, billed) => `ベースラインコンテキスト ${baseline} → セッション全体で ${billed} 請求`,
+    `呼び出し ${calls} 回 · 出力 ${output} · キャッシュ再読み取り <b>${read}</b>`,
+  baseline: (baseline, billed) => `ベースラインコンテキスト ${baseline} → セッション全体で ${billed} が請求されています`,
   cacheWrites: (write5m, write1h) =>
     `キャッシュ書き込み — 5分 ${write5m} · 1時間 ${write1h} (1時間は入力単価の2倍)`,
-  failedCalls: (n) => `失敗・中断した呼び出し ${n} 回`,
-  toolResidual: 'ツール別の残留コスト',
+  failedCalls: (n) => `失敗または中断した呼び出し ${n} 回`,
+  toolResidual: 'ツール別の持ち越しコスト',
   colTool: 'ツール',
-  colAdded: '追加',
+  colAdded: '追加分',
   colResidual: '再請求',
   pickSession: 'セッションを選んでください。',
 };
