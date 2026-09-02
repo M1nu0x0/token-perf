@@ -153,6 +153,26 @@ fn a_full_reread_does_not_double_the_failed_call_count() {
 }
 
 #[test]
+fn clearing_the_cursors_makes_the_next_sync_read_the_file_again() {
+    let path = temp("clear-cursors");
+    std::fs::write(&path, format!("{LINE_A}\n")).unwrap();
+    let mut store = Store::open_in_memory().unwrap();
+    assert_eq!(store.sync_file(&ClaudeCode, &path).unwrap(), Some(1));
+    assert_eq!(store.sync_file(&ClaudeCode, &path).unwrap(), Some(0));
+
+    store.clear_cursors().unwrap();
+
+    assert_eq!(
+        store.sync_file(&ClaudeCode, &path).unwrap(),
+        Some(1),
+        "an unchanged file is read again once its cursor is gone"
+    );
+    assert_eq!(store.sessions().unwrap()[0].calls.len(), 1);
+
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
 fn an_implausible_usage_never_reaches_the_store() {
     let broken = r#"{"type":"assistant","timestamp":"t0","message":{"id":"m9","model":"opus","usage":{"input_tokens":1,"cache_read_input_tokens":2000000000,"output_tokens":5}}}"#;
     let path = temp("clamp");

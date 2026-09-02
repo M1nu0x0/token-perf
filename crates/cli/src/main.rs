@@ -19,6 +19,9 @@ struct Cli {
     /// Interface language (en, ko, ja). Saved for later runs.
     #[arg(long, global = true)]
     lang: Option<String>,
+    /// Re-read every transcript from the start instead of only what is new
+    #[arg(long, global = true)]
+    rescan: bool,
     #[command(subcommand)]
     command: Command,
 }
@@ -129,7 +132,7 @@ fn main() {
     let (flag, unknown) = split_lang_flag(cli.lang.as_deref());
     rust_i18n::set_locale(resolve_lang(flag, None, process_lang().as_deref()));
 
-    let (store, sessions, scanned) = match sync_and_load() {
+    let (store, sessions, scanned) = match sync_and_load(cli.rescan) {
         Ok(loaded) => loaded,
         Err(e) => {
             eprintln!("{}", t!("store_open_failed", error = e));

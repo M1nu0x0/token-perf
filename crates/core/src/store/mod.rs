@@ -88,6 +88,12 @@ impl Store {
         Ok(())
     }
 
+    /// Drops every cursor so the next sync re-reads each file from byte 0.
+    pub fn clear_cursors(&self) -> rusqlite::Result<()> {
+        self.conn.execute("DELETE FROM file_cursor", [])?;
+        Ok(())
+    }
+
     pub fn sync(&mut self) -> rusqlite::Result<ScanReport> {
         let mut report = ScanReport::default();
         for source in crate::sources::all() {
