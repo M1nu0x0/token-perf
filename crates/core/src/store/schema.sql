@@ -48,6 +48,7 @@ CREATE TABLE IF NOT EXISTS call (
     cache_read     INTEGER NOT NULL DEFAULT 0,
     output         INTEGER NOT NULL DEFAULT 0,
     thinking       INTEGER NOT NULL DEFAULT 0,
+    compacted      INTEGER NOT NULL DEFAULT 0,
     usage_json     TEXT,
     PRIMARY KEY (session_id, seq),
     UNIQUE (session_id, message_id)

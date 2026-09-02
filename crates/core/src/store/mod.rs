@@ -9,7 +9,7 @@ use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 use crate::common::model::{Call, Session, ToolUse, Usage};
 use crate::sources::session_id;
 
-const SCHEMA_VERSION: i64 = 2;
+const SCHEMA_VERSION: i64 = 3;
 
 const TAIL_LEN: u64 = 64;
 
@@ -207,15 +207,15 @@ impl Store {
             .collect::<rusqlite::Result<_>>()?;
 
         let mut calls = tx.prepare(
-            "SELECT c.session_id, c.message_id, c.at, c.model, c.error,
+            "SELECT c.session_id, c.message_id, c.at, c.model, c.error, c.compacted,
                     c.input, c.cache_write_5m, c.cache_write_1h, c.cache_read, c.output, c.thinking
              FROM call c ORDER BY c.session_id, c.seq",
         )?;
         let mut by_session: std::collections::HashMap<String, Vec<Call>> =
             std::collections::HashMap::new();
         for row in calls.query_map([], |row| {
-            let write_5m: i64 = row.get(6)?;
-            let write_1h: i64 = row.get(7)?;
+            let write_5m: i64 = row.get(7)?;
+            let write_1h: i64 = row.get(8)?;
             Ok((
                 row.get::<_, String>(0)?,
                 Call {
@@ -223,6 +223,7 @@ impl Store {
                     at: row.get(2)?,
                     model: row.get(3)?,
                     error: row.get(4)?,
+                    compacted: row.get(5)?,
                     // Stored, but nothing reads them back yet.
                     effort: None,
                     skill: None,
@@ -230,12 +231,12 @@ impl Store {
                     agent: None,
                     usage_json: None,
                     usage: Usage {
-                        input: row.get::<_, i64>(5)? as u64,
+                        input: row.get::<_, i64>(6)? as u64,
                         cache_write_5m: write_5m as u64,
                         cache_write_1h: write_1h as u64,
-                        cache_read: row.get::<_, i64>(8)? as u64,
-                        output: row.get::<_, i64>(9)? as u64,
-                        thinking: row.get::<_, i64>(10)? as u64,
+                        cache_read: row.get::<_, i64>(9)? as u64,
+                        output: row.get::<_, i64>(10)? as u64,
+                        thinking: row.get::<_, i64>(11)? as u64,
                     },
                     tools: Vec::new(),
                 },
@@ -360,8 +361,9 @@ fn write_session(tx: &Connection, session: &Session, path: &str) -> rusqlite::Re
         tx.prepare_cached(
             "INSERT INTO call (session_id, seq, message_id, at, model, effort, error,
                  skill, plugin, agent,
-                 input, cache_write_5m, cache_write_1h, cache_read, output, thinking, usage_json)
-             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17)
+                 input, cache_write_5m, cache_write_1h, cache_read, output, thinking,
+                 compacted, usage_json)
+             VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18)
              ON CONFLICT(session_id, message_id) DO UPDATE SET
                  at = excluded.at, model = excluded.model,
                  -- A later healthy line must not blank the error or the attribution.
@@ -373,6 +375,8 @@ fn write_session(tx: &Connection, session: &Session, path: &str) -> rusqlite::Re
                  input = excluded.input, cache_write_5m = excluded.cache_write_5m,
                  cache_write_1h = excluded.cache_write_1h, cache_read = excluded.cache_read,
                  output = excluded.output, thinking = excluded.thinking,
+                 -- The marker and the call it flags can fall in different fragments.
+                 compacted = MAX(compacted, excluded.compacted),
                  usage_json = excluded.usage_json",
         )?
         .execute(params![
@@ -392,6 +396,7 @@ fn write_session(tx: &Connection, session: &Session, path: &str) -> rusqlite::Re
             u.cache_read as i64,
             u.output as i64,
             u.thinking as i64,
+            call.compacted,
             call.usage_json,
         ])?;
         written += 1;
@@ -444,6 +449,13 @@ fn migrate(conn: &mut Connection) -> rusqlite::Result<()> {
         return Ok(());
     }
     let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    if version < 3 {
+        // DEFAULT 0 leaves old rows to the fallback; no re-scan needed.
+        tx.execute(
+            "ALTER TABLE call ADD COLUMN compacted INTEGER NOT NULL DEFAULT 0",
+            [],
+        )?;
+    }
     tx.pragma_update(None, "user_version", SCHEMA_VERSION)?;
     tx.commit()
 }

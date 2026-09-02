@@ -20,6 +20,7 @@ fn call(cache_read: u64, cache_write: u64, output: u64, tool: &str, chars: usize
             thinking: 0,
         },
         error: None,
+        compacted: false,
         tools: if tool.is_empty() {
             Vec::new()
         } else {
@@ -151,7 +152,7 @@ fn residual_stops_at_the_next_compaction() {
             call(100, 0, 0, "Bash", 10),
             call(1100, 0, 0, "Bash", 10),
             call(1200, 0, 0, "Bash", 10),
-            call(300, 0, 0, "Bash", 10),
+            call(0, 300, 0, "Bash", 10),
             call(400, 0, 0, "", 0),
         ],
         failures: Vec::new(),
@@ -194,5 +195,59 @@ fn tldr_aggregates_across_sessions() {
     assert_eq!(
         t.solo_tool_pct, 100.0,
         "every tool message requested one tool"
+    );
+}
+
+/// Context 1000 -> 2000 -> the drop -> drop + 1000. Call 1 grows by 1000, so its
+/// residual is 2000 if the drop is not a compaction and 0 if it is.
+fn drop_session(read: u64, write: u64) -> Session {
+    Session {
+        calls: vec![
+            call(1000, 0, 0, "Bash", 10),
+            call(2000, 0, 0, "Bash", 10),
+            call(read, write, 0, "Bash", 10),
+            call(read + write + 1000, 0, 0, "", 0),
+        ],
+        ..three_call_session()
+    }
+}
+
+#[test]
+fn a_marked_call_is_a_compaction_however_shallow_the_drop() {
+    let mut s = drop_session(1900, 0);
+    s.calls[2].compacted = true;
+
+    let report = session(&s);
+
+    assert_eq!(report.calls[1].grew_by, 1000);
+    assert_eq!(report.calls[1].residual, 0, "the marker alone cuts it");
+}
+
+#[test]
+fn a_deep_drop_with_heavy_cache_writes_is_a_compaction() {
+    let report = session(&drop_session(500, 700));
+
+    assert_eq!(report.calls[1].grew_by, 1000);
+    assert_eq!(report.calls[1].residual, 0, "the fallback caught it");
+}
+
+#[test]
+fn a_shallow_drop_is_not_a_compaction_however_heavy_the_cache_writes() {
+    let report = session(&drop_session(100, 1500));
+
+    assert_eq!(
+        report.calls[1].residual, 2000,
+        "re-billed to the session end"
+    );
+    assert_eq!(report.calls[2].grew_by, 0, "a drop is not growth");
+}
+
+#[test]
+fn a_deep_drop_without_cache_writes_is_not_a_compaction() {
+    let report = session(&drop_session(1150, 50));
+
+    assert_eq!(
+        report.calls[1].residual, 2000,
+        "re-billed to the session end"
     );
 }

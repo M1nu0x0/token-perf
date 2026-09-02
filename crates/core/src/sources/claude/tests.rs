@@ -451,3 +451,16 @@ fn skips_lines_it_cannot_parse() {
     assert_eq!(session.calls.len(), 1);
     assert_eq!(session.project, "/p");
 }
+
+#[test]
+fn flags_the_first_call_after_a_compact_boundary() {
+    const BOUNDARY: &str =
+        r#"{"type":"system","subtype":"compact_boundary","compactMetadata":{"trigger":"manual"}}"#;
+    let post = ASSISTANT.replace(r#""id":"m1""#, r#""id":"m2""#);
+    let file = Transcript::new("compact-boundary", &[ASSISTANT, BOUNDARY, &post]);
+
+    let session = file.load();
+
+    assert!(!session.calls[0].compacted);
+    assert!(session.calls[1].compacted);
+}

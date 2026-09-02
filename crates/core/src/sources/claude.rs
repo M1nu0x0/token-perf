@@ -68,6 +68,7 @@ impl Source for ClaudeCode {
         let mut tool_slot: HashMap<String, (usize, usize)> = HashMap::new();
         let mut open: Option<u64> = None;
         let mut started: HashSet<String> = HashSet::new();
+        let mut compacted = false;
 
         let mut raw_line = Vec::new();
         loop {
@@ -92,6 +93,11 @@ impl Source for ClaudeCode {
             }
             if session.started_at.is_empty() && !raw.timestamp.is_empty() {
                 session.started_at = raw.timestamp.clone();
+            }
+
+            if raw.kind == "system" && raw.subtype == "compact_boundary" {
+                compacted = true;
+                continue;
             }
 
             if raw.kind == "ai-title" && !raw.ai_title.is_empty() {
@@ -167,6 +173,7 @@ impl Source for ClaudeCode {
                                 usage,
                                 usage_json: Some(usage_value.to_string()),
                                 error: error_kind,
+                                compacted: std::mem::take(&mut compacted),
                                 tools: Vec::new(),
                             });
                             Some(index)
@@ -225,6 +232,8 @@ impl Source for ClaudeCode {
 struct RawLine {
     #[serde(rename = "type", default)]
     kind: String,
+    #[serde(default)]
+    subtype: String,
     #[serde(default)]
     timestamp: String,
     #[serde(default)]

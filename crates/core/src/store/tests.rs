@@ -391,3 +391,48 @@ fn two_processes_syncing_the_same_file_do_not_double_the_failures() {
 
     std::fs::remove_dir_all(&dir).ok();
 }
+
+#[test]
+fn a_scan_boundary_between_the_marker_and_its_call_keeps_the_flag() {
+    const BOUNDARY: &str =
+        r#"{"type":"system","subtype":"compact_boundary","compactMetadata":{"trigger":"manual"}}"#;
+    let path = temp("compact-boundary");
+    std::fs::write(&path, format!("{LINE_A}\n{BOUNDARY}\n{LINE_C}\n")).unwrap();
+    let mut store = Store::open_in_memory().unwrap();
+    store.sync_file(&ClaudeCode, &path).unwrap();
+    // The cursor rewound to LINE_C, so the re-read never sees the marker again.
+    std::fs::write(&path, format!("{LINE_A}\n{BOUNDARY}\n{LINE_C}\n{LINE_B}\n")).unwrap();
+
+    store.sync_file(&ClaudeCode, &path).unwrap();
+
+    let calls = &store.sessions().unwrap()[0].calls;
+    assert!(!calls[0].compacted);
+    assert!(calls[1].compacted, "the flag must survive the re-read");
+
+    std::fs::remove_file(&path).ok();
+}
+
+#[test]
+fn an_upgraded_db_gains_the_compacted_column() {
+    let conn = Connection::open_in_memory().unwrap();
+    conn.execute_batch(
+        &include_str!("schema.sql").replace("compacted      INTEGER NOT NULL DEFAULT 0,", ""),
+    )
+    .unwrap();
+    conn.pragma_update(None, "user_version", 2).unwrap();
+
+    let store = Store::from_connection(conn).unwrap();
+
+    let version: i64 = store
+        .conn
+        .query_row("PRAGMA user_version", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(version, SCHEMA_VERSION);
+    store
+        .conn
+        .query_row("SELECT compacted FROM call LIMIT 1", [], |r| {
+            r.get::<_, i64>(0)
+        })
+        .optional()
+        .unwrap();
+}

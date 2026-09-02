@@ -64,6 +64,8 @@ pub struct Call {
     #[serde(skip)]
     pub usage_json: Option<String>,
     pub error: Option<String>,
+    /// First call after a `compact_boundary` marker.
+    pub compacted: bool,
     pub tools: Vec<ToolUse>,
 }
 

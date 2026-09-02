@@ -68,9 +68,10 @@ pub fn session(s: &Session) -> Report {
         grew[i] = after.saturating_sub(before);
         // A small dip is a spike settling back or a broken record; calling that a
         // compaction would truncate every residual.
-        // ponytail: the half-context boundary is arbitrary; a compaction it misses
-        // inflates every residual before it.
-        shrank[i] = after < prev.usage.context() / 2;
+        // ponytail: without a marker the constants are arbitrary; a compaction the
+        // fallback misses inflates every residual before it.
+        let cw_ratio = call.usage.cache_write() as f64 / after.max(1) as f64;
+        shrank[i] = call.compacted || (after < prev.usage.context() * 3 / 4 && cw_ratio >= 0.4);
     }
     // First shrink after each call (n if none).
     let mut next_shrink = vec![n; n];
