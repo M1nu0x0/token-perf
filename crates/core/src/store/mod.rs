@@ -9,7 +9,7 @@ use rusqlite::{Connection, OptionalExtension, TransactionBehavior, params};
 use crate::common::model::{Call, Session, ToolUse, Usage};
 use crate::sources::session_id;
 
-const SCHEMA_VERSION: i64 = 3;
+const SCHEMA_VERSION: i64 = 4;
 
 const TAIL_LEN: u64 = 64;
 
@@ -67,6 +67,25 @@ impl Store {
             migrate(&mut conn)?;
         }
         Ok(Self { conn })
+    }
+
+    pub fn setting(&self, key: &str) -> rusqlite::Result<Option<String>> {
+        self.conn
+            .query_row(
+                "SELECT value FROM setting WHERE key = ?1",
+                params![key],
+                |row| row.get(0),
+            )
+            .optional()
+    }
+
+    pub fn set_setting(&self, key: &str, value: &str) -> rusqlite::Result<()> {
+        self.conn.execute(
+            "INSERT INTO setting (key, value) VALUES (?1, ?2)
+             ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            params![key, value],
+        )?;
+        Ok(())
     }
 
     pub fn sync(&mut self) -> rusqlite::Result<ScanReport> {
@@ -456,6 +475,7 @@ fn migrate(conn: &mut Connection) -> rusqlite::Result<()> {
             [],
         )?;
     }
+    // v4 adds only `setting`, which schema.sql already created above.
     tx.pragma_update(None, "user_version", SCHEMA_VERSION)?;
     tx.commit()
 }

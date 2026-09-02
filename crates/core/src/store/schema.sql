@@ -74,3 +74,8 @@ CREATE TABLE IF NOT EXISTS failure (
     key        TEXT NOT NULL,
     PRIMARY KEY (session_id, key)
 );
+
+CREATE TABLE IF NOT EXISTS setting (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);

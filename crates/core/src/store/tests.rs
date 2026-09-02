@@ -436,3 +436,14 @@ fn an_upgraded_db_gains_the_compacted_column() {
         .optional()
         .unwrap();
 }
+
+#[test]
+fn a_setting_survives_a_rewrite_and_is_missing_until_written() {
+    let store = Store::open_in_memory().unwrap();
+
+    assert_eq!(store.setting("lang").unwrap(), None);
+    store.set_setting("lang", "ko").unwrap();
+    assert_eq!(store.setting("lang").unwrap().as_deref(), Some("ko"));
+    store.set_setting("lang", "ja").unwrap();
+    assert_eq!(store.setting("lang").unwrap().as_deref(), Some("ja"));
+}

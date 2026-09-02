@@ -7,8 +7,11 @@ pub use common::model::Session;
 
 use store::{ScanReport, Store};
 
-pub fn sync_and_load() -> rusqlite::Result<(Vec<Session>, ScanReport)> {
+/// The store comes back so the caller can read and write settings on the same
+/// connection.
+pub fn sync_and_load() -> rusqlite::Result<(Store, Vec<Session>, ScanReport)> {
     let mut store = Store::open_default()?;
     let report = store.sync()?;
-    Ok((store.sessions()?, report))
+    let sessions = store.sessions()?;
+    Ok((store, sessions, report))
 }

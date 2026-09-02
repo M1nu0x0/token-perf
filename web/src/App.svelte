@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { messages, type Bucket } from './messages';
+
   type Usage = {
     input: number; cache_write_5m: number; cache_write_1h: number;
     cache_read: number; output: number; thinking: number;
@@ -15,12 +17,13 @@
 
   type Tldr = {
     sessions: number; calls: number; totals: Usage; cache_read_pct: number;
-    amplification: { label: string; sessions: number; ratio: number }[];
+    amplification: (Bucket & { sessions: number; ratio: number })[];
     top_tools: { name: string; added: number; pct: number }[];
     top_sessions: { session: string; title: string; call_count: number; residual: number }[];
     solo_tool_pct: number;
   };
 
+  let m = $state(messages('en'));
   let tab = $state<'tldr' | 'sessions'>('tldr');
   let tldr = $state<Tldr | null>(null);
   let sessions = $state<Report[]>([]);
@@ -42,10 +45,11 @@
 
   async function load() {
     try {
-      const res = await Promise.all([fetch('/api/tldr'), fetch('/api/sessions')]);
+      const res = await Promise.all([fetch('/api/tldr'), fetch('/api/sessions'), fetch('/api/config')]);
       const bad = res.find((r) => !r.ok);
       if (bad) throw new Error(`${bad.status} ${bad.statusText}`);
-      [tldr, sessions] = await Promise.all(res.map((r) => r.json()));
+      const [t, s, cfg] = await Promise.all(res.map((r) => r.json()));
+      [tldr, sessions, m] = [t, s, messages(cfg.lang)];
     } catch (e) {
       error = String(e);
     }
@@ -69,51 +73,49 @@
 <h1>
   token-perf
   <nav>
-    <button class:on={tab === 'tldr'} onclick={() => (tab = 'tldr')}>세 줄 요약</button>
-    <button class:on={tab === 'sessions'} onclick={() => (tab = 'sessions')}>세션</button>
+    <button class:on={tab === 'tldr'} onclick={() => (tab = 'tldr')}>{m.tabTldr}</button>
+    <button class:on={tab === 'sessions'} onclick={() => (tab = 'sessions')}>{m.tabSessions}</button>
   </nav>
 </h1>
 {#if error}<p class="err">{error}</p>{/if}
 
 {#if tab === 'tldr' && tldr}
   <section class="tldr">
-    <p class="lead">
-      세션 {tldr.sessions}개, 호출 {human(tldr.calls)}회를 훑어봤어요.
-    </p>
+    <p class="lead">{m.lead(tldr.sessions, human(tldr.calls))}</p>
 
     <div class="big">{tldr.cache_read_pct.toFixed(0)}%</div>
     <p>
-      당신 토큰의 <b>{tldr.cache_read_pct.toFixed(0)}%</b>는 이미 읽은 걸 다시 읽는 데 쓰였어요.
-      새로 말한 건 {human(tldr.totals.output)}밖에 안 되는데,
-      다시 읽은 건 {human(tldr.totals.cache_read)}이에요.
+      {@html m.cacheRead(
+        tldr.cache_read_pct.toFixed(0),
+        human(tldr.totals.output),
+        human(tldr.totals.cache_read),
+      )}
     </p>
 
-    <h3>대화가 길수록 같은 걸 여러 번 삽니다</h3>
+    <h3>{m.lengthHeading}</h3>
     <p>
-      한 번 들어온 내용은 대화가 끝날 때까지 매번 다시 실려 갑니다.
+      {m.lengthIntro}
       {#if short?.sessions && long?.sessions}
-        짧은 대화는 {short.ratio.toFixed(1)}번,
-        긴 대화는 <b>{long.ratio.toFixed(1)}번</b> 다시 사는 셈이에요.
+        {@html m.lengthCompare(short.ratio.toFixed(1), long.ratio.toFixed(1))}
       {/if}
     </p>
     <table>
-      <thead><tr><th>대화 길이</th><th>개수</th><th>같은 내용을 다시 산 횟수</th></tr></thead>
+      <thead><tr><th>{m.colLength}</th><th>{m.colCount}</th><th>{m.colRebought}</th></tr></thead>
       <tbody>
-        {#each tldr.amplification as b (b.label)}
-          <tr><td>{b.label}</td><td class="n">{b.sessions}</td><td class="n">{b.ratio.toFixed(1)}번</td></tr>
+        {#each tldr.amplification as b (b.min)}
+          <tr><td>{m.bucket(b)}</td><td class="n">{b.sessions}</td><td class="n">{m.times(b.ratio.toFixed(1))}</td></tr>
         {/each}
       </tbody>
     </table>
 
-    <h3>덩치를 키운 범인</h3>
+    <h3>{m.culpritHeading}</h3>
     <p>
-      {#each tldr.top_tools as t, i (t.name)}{i ? ', ' : ''}<b>{t.name}</b> {t.pct.toFixed(0)}%{/each}
-      — 툴이 대화에 밀어 넣은 양 중 이만큼을 차지해요. 결과가 큰 툴을 덜 부르거나 잘라 쓰면 바로 줄어듭니다.
+      {#each tldr.top_tools as t, i (t.name)}{i ? ', ' : ''}<b>{t.name}</b> {t.pct.toFixed(0)}%{/each}{m.culpritTail}
     </p>
 
-    <h3>제일 비쌌던 대화 셋</h3>
+    <h3>{m.topHeading}</h3>
     <table>
-      <thead><tr><th>대화</th><th>호출</th><th>다시 청구된 토큰</th></tr></thead>
+      <thead><tr><th>{m.colConversation}</th><th>{m.colCalls}</th><th>{m.colRebilled}</th></tr></thead>
       <tbody>
         {#each tldr.top_sessions as s (s.session)}
           <tr onclick={() => open(s.session)}><td>{s.title}</td><td class="n">{s.call_count}</td><td class="n">{human(s.residual)}</td></tr>
@@ -121,11 +123,8 @@
       </tbody>
     </table>
 
-    <h3>한 번에 하나씩</h3>
-    <p>
-      툴을 쓴 메시지의 <b>{tldr.solo_tool_pct.toFixed(0)}%</b>가 툴을 딱 하나만 불렀어요.
-      한 번에 여러 개를 같이 부르면 그만큼 왕복이 줄고, 왕복이 줄면 다시 읽는 양도 줄어요.
-    </p>
+    <h3>{m.soloHeading}</h3>
+    <p>{@html m.soloLine(tldr.solo_tool_pct.toFixed(0))}</p>
   </section>
 {/if}
 
@@ -133,11 +132,11 @@
 <div class="cols">
   <section>
     <h2>
-      세션 <small>캐시 재읽기 순</small>
-      <label><input type="checkbox" bind:checked={showAll} /> 서브에이전트 포함</label>
+      {m.sessionsHeading} <small>{m.byCacheRead}</small>
+      <label><input type="checkbox" bind:checked={showAll} /> {m.includeSubagents}</label>
     </h2>
     <table>
-      <thead><tr><th>날짜</th><th>세션</th><th>호출</th><th>캐시 재읽기</th><th>출력</th></tr></thead>
+      <thead><tr><th>{m.colDate}</th><th>{m.colSession}</th><th>{m.colCalls}</th><th>{m.colCacheRead}</th><th>{m.colOutput}</th></tr></thead>
       <tbody>
         {#each visible.slice(0, 50) as s (s.session)}
           <tr class:active={selected?.session === s.session} onclick={() => open(s.session)}>
@@ -162,27 +161,29 @@
       <p class="dim">
         {selected.project}
         {#if selected.parent}
-          · {selected.agent_type ?? '서브에이전트'}{selected.spawn_depth ? ` · 깊이 ${selected.spawn_depth}` : ''}
+          · {selected.agent_type ?? m.subagent}{selected.spawn_depth ? m.depth(selected.spawn_depth) : ''}
         {/if}
       </p>
       <p>
-        호출 {selected.call_count}회 · 출력 {human(selected.totals.output)} ·
-        캐시 재읽기 <b>{human(selected.totals.cache_read)}</b>
+        {@html m.totals(
+          selected.call_count,
+          human(selected.totals.output),
+          human(selected.totals.cache_read),
+        )}
       </p>
-      <p>기저 컨텍스트 {human(selected.baseline)} → 세션 전체에서 {human(selected.baseline_billed)} 청구</p>
+      <p>{m.baseline(human(selected.baseline), human(selected.baseline_billed))}</p>
       {#if selected.totals.cache_write_1h > 0}
         <p class="dim">
-          캐시 쓰기 — 5분 {human(selected.totals.cache_write_5m)} ·
-          1시간 {human(selected.totals.cache_write_1h)} (1시간은 입력 단가의 2배)
+          {m.cacheWrites(human(selected.totals.cache_write_5m), human(selected.totals.cache_write_1h))}
         </p>
       {/if}
       {#if selected.failed_calls > 0}
-        <p class="dim">실패·중단된 호출 {selected.failed_calls}회</p>
+        <p class="dim">{m.failedCalls(selected.failed_calls)}</p>
       {/if}
 
-      <h3>툴별 잔류 비용</h3>
+      <h3>{m.toolResidual}</h3>
       <table>
-        <thead><tr><th>툴</th><th>호출</th><th>추가</th><th>재청구</th></tr></thead>
+        <thead><tr><th>{m.colTool}</th><th>{m.colCalls}</th><th>{m.colAdded}</th><th>{m.colResidual}</th></tr></thead>
         <tbody>
           {#each selected.tools.slice(0, 15) as t (t.name)}
             <tr><td>{t.name}</td><td class="n">{t.calls}</td><td class="n">{human(t.added)}</td><td class="n">{human(t.residual)}</td></tr>
@@ -190,7 +191,7 @@
         </tbody>
       </table>
     {:else}
-      <p>세션을 고르세요.</p>
+      <p>{m.pickSession}</p>
     {/if}
   </section>
 </div>

@@ -45,6 +45,18 @@ token-perf serve --port 5177 # 포트 고정 (--no-open 이면 브라우저를 �
 UI 를 고칠 때는 `token-perf serve --port 5177` 를 띄워 둔 채 `cd web && npm run dev` —
 vite 개발 서버가 `/api` 를 5177 로 프록시한다.
 
+### 언어
+
+en · ko · ja 를 지원한다. CLI 출력과 웹 UI 가 같은 언어를 쓴다.
+
+```sh
+token-perf --lang ja sessions   # 이번 실행부터 일본어, 설정에 저장돼 다음 실행에도 유지된다
+```
+
+결정 순서는 `--lang` → 저장된 설정 → `LC_ALL`/`LANG` → `en`. 지원하지 않는 코드를 주면
+그 플래그는 무시하고(저장도 하지 않는다) 경고만 한 줄 내보낸다 — 오타 하나로 저장해 둔
+언어를 잃지 않는다. `--help` 는 영어로 남는다.
+
 ## 빌드
 
 ```sh

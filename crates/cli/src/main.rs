@@ -1,67 +1,131 @@
 use std::cmp::Reverse;
 
 use clap::{Parser, Subcommand};
-use token_perf_core::{common::analyze, sync_and_load};
+use rust_i18n::t;
+use token_perf_core::{common::analyze, store::Store, sync_and_load};
+
+// `--help` stays English: clap doc comments are compile-time literals.
+rust_i18n::i18n!("locales", fallback = "en");
+
+const LANGS: [&str; 3] = ["en", "ko", "ja"];
 
 #[derive(Parser)]
 #[command(
     name = "token-perf",
     version,
-    about = "로컬 에이전트 로그에서 토큰이 어디로 새는지 찾는다"
+    about = "Find where your tokens leak, from local agent logs"
 )]
 struct Cli {
+    /// Interface language (en, ko, ja). Saved for later runs.
+    #[arg(long, global = true)]
+    lang: Option<String>,
     #[command(subcommand)]
     command: Command,
 }
 
 #[derive(Subcommand)]
 enum Command {
-    /// 세션 목록을 캐시 재청구량이 큰 순으로 보여준다
+    /// List sessions, most re-billed cache first
     Sessions {
         #[arg(long, default_value_t = 20)]
         top: usize,
-        /// 서브에이전트 세션까지 포함한다 (기본은 최상위 세션만)
+        /// Include subagent sessions (top-level only by default)
         #[arg(long)]
         all: bool,
     },
-    /// 한 세션의 낭비를 툴별로 귀속해 보여준다 (생략하면 가장 최근 세션)
+    /// Attribute one session's waste to the tools that caused it (defaults to the latest)
     Report {
         session: Option<String>,
         #[arg(long, default_value_t = 15)]
         top: usize,
     },
-    /// 웹 UI를 띄우고 브라우저로 연다
+    /// Start the web UI and open it in a browser
     Serve {
-        /// 붙일 포트. 생략하면 OS 가 비어 있는 포트를 골라 준다
+        /// Port to bind. Omit and the OS picks a free one
         #[arg(long)]
         port: Option<u16>,
-        /// 브라우저를 자동으로 열지 않는다
+        /// Do not open a browser
         #[arg(long)]
         no_open: bool,
     },
 }
 
+fn supported(code: &str) -> Option<&'static str> {
+    let short = code.split(['_', '.', '-']).next().unwrap_or_default();
+    LANGS.into_iter().find(|l| *l == short)
+}
+
+fn resolve_lang(flag: Option<&str>, saved: Option<&str>, env: Option<&str>) -> &'static str {
+    flag.or(saved).or(env).and_then(supported).unwrap_or("en")
+}
+
+/// POSIX: LC_ALL overrides LANG.
+fn env_lang(lc_all: Option<&str>, lang: Option<&str>) -> Option<String> {
+    lc_all
+        .or(lang)
+        .filter(|v| !v.is_empty())
+        .map(str::to_string)
+}
+
+fn process_lang() -> Option<String> {
+    env_lang(
+        std::env::var("LC_ALL").ok().as_deref(),
+        std::env::var("LANG").ok().as_deref(),
+    )
+}
+
+/// Set twice so a store failure still reports in a sensible language.
+fn apply_lang(store: &Store, flag: Option<&str>) -> String {
+    let saved = store.setting("lang").ok().flatten();
+    let lang = resolve_lang(flag, saved.as_deref(), process_lang().as_deref());
+    if flag.is_some() {
+        store.set_setting("lang", lang).ok();
+    }
+    rust_i18n::set_locale(lang);
+    lang.to_string()
+}
+
+/// A typo must not erase a stored preference: an unknown code is dropped, not saved.
+fn split_lang_flag(flag: Option<&str>) -> (Option<&str>, Option<&str>) {
+    match flag {
+        Some(code) if supported(code).is_none() => (None, Some(code)),
+        code => (code, None),
+    }
+}
+
 fn main() {
     let cli = Cli::parse();
-    let (sessions, scanned) = match sync_and_load() {
+    let (flag, unknown) = split_lang_flag(cli.lang.as_deref());
+    rust_i18n::set_locale(resolve_lang(flag, None, process_lang().as_deref()));
+
+    let (store, sessions, scanned) = match sync_and_load() {
         Ok(loaded) => loaded,
         Err(e) => {
-            eprintln!("저장소를 열지 못했습니다: {e}");
+            eprintln!("{}", t!("store_open_failed", error = e));
             std::process::exit(1);
         }
     };
+    let lang = apply_lang(&store, flag);
+    if let Some(code) = unknown {
+        eprintln!("{}", t!("unknown_lang", code = code));
+    }
     if scanned.files_read > 0 {
         eprintln!(
-            "트랜스크립트 {}개 중 {}개에서 호출 {}건을 새로 읽었습니다.",
-            scanned.files_seen, scanned.files_read, scanned.calls_written
+            "{}",
+            t!(
+                "scanned",
+                seen = scanned.files_seen,
+                read = scanned.files_read,
+                calls = scanned.calls_written
+            )
         );
     }
     if scanned.files_skipped > 0 {
-        eprintln!("{}개는 읽지 못해 건너뛰었습니다.", scanned.files_skipped);
+        eprintln!("{}", t!("skipped", count = scanned.files_skipped));
     }
     // serve must start with no sessions: CI has no ~/.claude at all.
     if sessions.is_empty() && !matches!(cli.command, Command::Serve { .. }) {
-        eprintln!("세션이 없습니다. ~/.claude/projects 를 확인하세요.");
+        eprintln!("{}", t!("no_sessions"));
         std::process::exit(1);
     }
 
@@ -109,7 +173,7 @@ fn main() {
                     let matches: Vec<_> =
                         sessions.iter().filter(|s| s.id.starts_with(id)).collect();
                     if matches.len() > 1 {
-                        eprintln!("'{id}' 로 시작하는 세션이 여럿입니다:");
+                        eprintln!("{}", t!("ambiguous", prefix = id));
                         for s in matches {
                             eprintln!("  {}  {}", s.id, s.title);
                         }
@@ -121,7 +185,7 @@ fn main() {
                 None => latest(true).or_else(|| latest(false)),
             };
             let Some(target) = target else {
-                eprintln!("해당 세션을 찾지 못했습니다.");
+                eprintln!("{}", t!("not_found"));
                 std::process::exit(1);
             };
 
@@ -131,10 +195,11 @@ fn main() {
                 println!("title    {}", r.title);
             }
             if let Some(parent) = &r.parent {
-                let kind = r.agent_type.as_deref().unwrap_or("서브에이전트");
+                let subagent = t!("subagent");
+                let kind = r.agent_type.as_deref().unwrap_or(&subagent);
                 let depth = r
                     .spawn_depth
-                    .map_or(String::new(), |d| format!(" · 깊이 {d}"));
+                    .map_or(String::new(), |d| t!("depth", depth = d).into_owned());
                 println!("parent   {parent}  ({kind}{depth})");
                 if let Some(tool_use) = &r.parent_tool_use_id {
                     println!("spawned  {tool_use}");
@@ -144,22 +209,31 @@ fn main() {
             println!("started  {}", r.started_at);
             println!();
             println!(
-                "호출 {}회 · 출력 {} · 캐시 재읽기 {} · 캐시 쓰기 {}",
-                r.call_count,
-                human(r.totals.output),
-                human(r.totals.cache_read),
-                human(r.totals.cache_write())
+                "{}",
+                t!(
+                    "totals",
+                    calls = r.call_count,
+                    output = human(r.totals.output),
+                    cache_read = human(r.totals.cache_read),
+                    cache_write = human(r.totals.cache_write())
+                )
             );
             println!(
-                "기저 컨텍스트 {} (시스템 프롬프트·툴 정의·규칙 파일) → 세션 전체에서 {} 청구",
-                human(r.baseline),
-                human(r.baseline_billed)
+                "{}",
+                t!(
+                    "baseline",
+                    baseline = human(r.baseline),
+                    billed = human(r.baseline_billed)
+                )
             );
             if r.totals.cache_write_1h > 0 {
                 println!(
-                    "캐시 쓰기 내역 — 5분 {} · 1시간 {} (1시간 캐시는 입력 단가의 2배)",
-                    human(r.totals.cache_write_5m),
-                    human(r.totals.cache_write_1h)
+                    "{}",
+                    t!(
+                        "cache_writes",
+                        write_5m = human(r.totals.cache_write_5m),
+                        write_1h = human(r.totals.cache_write_1h)
+                    )
                 );
             }
             if r.failed_calls > 0 {
@@ -167,11 +241,14 @@ fn main() {
                     true => String::new(),
                     false => format!(" ({})", r.error_kinds.join(", ")),
                 };
-                println!("실패·중단된 호출 {}회{kinds}", r.failed_calls);
+                println!(
+                    "{}",
+                    t!("failed_calls", count = r.failed_calls, kinds = kinds)
+                );
             }
             println!();
 
-            println!("툴별 잔류 비용 (컨텍스트에 남아 재청구된 토큰)");
+            println!("{}", t!("tool_residual"));
             println!(
                 "  {:<38} {:>6} {:>10} {:>10}",
                 "TOOL", "CALLS", "ADDED", "RESIDUAL"
@@ -187,7 +264,7 @@ fn main() {
             }
             println!();
 
-            println!("컨텍스트를 가장 크게 불린 호출");
+            println!("{}", t!("worst_calls"));
             println!(
                 "  {:<6} {:>10} {:>10} {:>10}  TOOLS",
                 "CALL", "CONTEXT", "GREW", "RESIDUAL"
@@ -206,26 +283,31 @@ fn main() {
             }
         }
 
-        Command::Serve { port, no_open } => serve(sessions, port.unwrap_or(0), !no_open),
+        Command::Serve { port, no_open } => serve(sessions, lang, port.unwrap_or(0), !no_open),
     }
 }
 
-fn serve(sessions: Vec<token_perf_core::Session>, port: u16, open: bool) {
+fn serve(sessions: Vec<token_perf_core::Session>, lang: String, port: u16, open: bool) {
     let count = sessions.len();
     let runtime = tokio::runtime::Runtime::new().expect("tokio runtime");
 
     // The callback fires after the listener is open, so the browser is never refused.
-    let result = runtime.block_on(token_perf_core::server::serve(sessions, port, |bound| {
-        let url = format!("http://localhost:{bound}");
-        println!("token-perf: {url}  (세션 {count}개)");
-        println!("멈추려면 Ctrl-C");
-        if open {
-            open_browser(&url);
-        }
-    }));
+    let result = runtime.block_on(token_perf_core::server::serve(
+        sessions,
+        lang,
+        port,
+        |bound| {
+            let url = format!("http://localhost:{bound}");
+            println!("{}", t!("serving", url = url, count = count));
+            println!("{}", t!("stop_hint"));
+            if open {
+                open_browser(&url);
+            }
+        },
+    ));
 
     if let Err(e) = result {
-        eprintln!("서버 시작 실패: {e}");
+        eprintln!("{}", t!("serve_failed", error = e));
         std::process::exit(1);
     }
 }
@@ -262,5 +344,50 @@ fn human(n: u64) -> String {
         1_000..=999_999 => format!("{:.1}K", n as f64 / 1e3),
         1_000_000..=999_999_999 => format!("{:.1}M", n as f64 / 1e6),
         _ => format!("{:.1}B", n as f64 / 1e9),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{env_lang, resolve_lang, split_lang_flag};
+
+    #[test]
+    fn the_flag_beats_the_setting_and_the_setting_beats_the_environment() {
+        assert_eq!(resolve_lang(Some("ja"), Some("ko"), Some("en_US")), "ja");
+        assert_eq!(resolve_lang(None, Some("ko"), Some("en_US")), "ko");
+        assert_eq!(resolve_lang(None, None, Some("ja_JP.UTF-8")), "ja");
+        assert_eq!(resolve_lang(None, None, None), "en");
+    }
+
+    #[test]
+    fn an_unsupported_code_falls_back_to_english_without_trying_the_next_source() {
+        assert_eq!(resolve_lang(None, Some("fr"), Some("ko_KR")), "en");
+        assert_eq!(resolve_lang(None, None, Some("C")), "en");
+        assert_eq!(resolve_lang(None, None, Some("zh_CN.UTF-8")), "en");
+    }
+
+    #[test]
+    fn an_unsupported_flag_is_dropped_but_kept_for_the_warning() {
+        assert_eq!(split_lang_flag(Some("fr")), (None, Some("fr")));
+        assert_eq!(split_lang_flag(Some("ja")), (Some("ja"), None));
+        assert_eq!(split_lang_flag(None), (None, None));
+    }
+
+    #[test]
+    fn lc_all_outranks_lang() {
+        assert_eq!(
+            env_lang(Some("ja_JP.UTF-8"), Some("ko_KR")).as_deref(),
+            Some("ja_JP.UTF-8")
+        );
+        assert_eq!(env_lang(None, Some("ko_KR")).as_deref(), Some("ko_KR"));
+        assert_eq!(env_lang(None, None), None);
+        // An empty LC_ALL is a set variable, so LANG never gets a turn.
+        assert_eq!(env_lang(Some(""), Some("ko_KR")), None);
+    }
+
+    #[test]
+    fn a_locale_carries_a_region_and_an_encoding() {
+        assert_eq!(resolve_lang(None, None, Some("ko_KR.UTF-8")), "ko");
+        assert_eq!(resolve_lang(Some("en-US"), None, None), "en");
     }
 }

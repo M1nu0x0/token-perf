@@ -182,9 +182,11 @@ pub struct Tldr {
     pub solo_tool_pct: f64,
 }
 
+/// Call-count range; the display label is the caller's business.
 #[derive(Debug, Serialize)]
 pub struct Bucket {
-    pub label: String,
+    pub min: usize,
+    pub max: Option<usize>,
     pub sessions: usize,
     /// sum(residual) / sum(grew_by): how often the same token was bought again.
     pub ratio: f64,
@@ -205,13 +207,15 @@ pub struct TldrSession {
     pub residual: u64,
 }
 
+/// Inclusive call-count ranges; `None` is open-ended.
+const BUCKETS: [(usize, Option<usize>); 3] = [(0, Some(5)), (6, Some(40)), (41, None)];
+
 pub fn tldr(sessions: &[Session]) -> Tldr {
     let mut out = Tldr {
         sessions: sessions.len(),
         ..Default::default()
     };
-    // (≤5, 6-40, 41+) buckets of (sessions, residual sum, grew_by sum).
-    let mut buckets = [(0usize, 0u64, 0u64); 3];
+    let mut buckets = [(0usize, 0u64, 0u64); BUCKETS.len()];
     let mut tools: std::collections::HashMap<String, u64> = std::collections::HashMap::new();
     let mut top: Vec<TldrSession> = Vec::new();
     let (mut tool_msgs, mut solo_msgs) = (0usize, 0usize);
@@ -223,11 +227,10 @@ pub fn tldr(sessions: &[Session]) -> Tldr {
 
         let residual: u64 = r.calls.iter().map(|c| c.residual).sum();
         let grew: u64 = r.calls.iter().map(|c| c.grew_by).sum();
-        let bucket = match r.call_count {
-            0..=5 => 0,
-            6..=40 => 1,
-            _ => 2,
-        };
+        let bucket = BUCKETS
+            .iter()
+            .position(|(_, max)| max.is_none_or(|m| r.call_count <= m))
+            .unwrap_or(BUCKETS.len() - 1);
         buckets[bucket].0 += 1;
         buckets[bucket].1 += residual;
         buckets[bucket].2 += grew;
@@ -263,11 +266,12 @@ pub fn tldr(sessions: &[Session]) -> Tldr {
     out.cache_read_pct = pct(out.totals.cache_read, billed);
     out.solo_tool_pct = pct(solo_msgs as u64, tool_msgs as u64);
 
-    out.amplification = ["5회 이하", "6~40회", "41회 이상"]
+    out.amplification = BUCKETS
         .iter()
         .zip(buckets)
-        .map(|(label, (n, residual, grew))| Bucket {
-            label: (*label).into(),
+        .map(|(&(min, max), (n, residual, grew))| Bucket {
+            min,
+            max,
             sessions: n,
             ratio: if grew == 0 {
                 0.0
