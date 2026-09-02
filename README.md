@@ -36,6 +36,22 @@ re-reads only the grown part of the files that changed (in my environment, ~2s f
 files, ~0.03s after that). The raw JSON of each usage block is stored alongside, so a field you need
 later can be pulled out with `json_extract` without a re-scan.
 
+## Install
+
+Prebuilt binaries for the latest release:
+
+```sh
+# macOS (Apple silicon)
+curl -fsSL https://github.com/M1nu0x0/token-perf/releases/latest/download/token-perf-aarch64-apple-darwin.tar.gz | tar -xz
+# macOS (Intel)
+curl -fsSL https://github.com/M1nu0x0/token-perf/releases/latest/download/token-perf-x86_64-apple-darwin.tar.gz | tar -xz
+# Linux (x86_64)
+curl -fsSL https://github.com/M1nu0x0/token-perf/releases/latest/download/token-perf-x86_64-unknown-linux-gnu.tar.gz | tar -xz
+```
+
+That leaves a `token-perf` binary in the current directory; move it somewhere on your `PATH`.
+Each archive ships a `.sha256` next to it.
+
 ## Usage
 
 ```sh
@@ -61,6 +77,8 @@ the flag is ignored (and not saved) and only a one-line warning is printed — o
 cost you the language you saved. `--help` stays in English.
 
 ## Build
+
+To build from source instead:
 
 ```sh
 (cd web && npm ci && npm run build)   # the UI must be built first to be embedded in the binary

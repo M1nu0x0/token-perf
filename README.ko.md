@@ -35,6 +35,22 @@ residual(n) = grew(n) × (다음 컴팩션 전까지 남은 호출 수)  # 컨�
 (필자 환경에서 649파일 첫 스캔 ~2초, 이후 ~0.03초). usage 블록의 원본 JSON 도 함께 저장하므로,
 나중에 필요해진 필드는 재스캔 없이 `json_extract` 로 꺼낼 수 있다.
 
+## 설치
+
+최신 릴리스의 프리빌트 바이너리:
+
+```sh
+# macOS (애플 실리콘)
+curl -fsSL https://github.com/M1nu0x0/token-perf/releases/latest/download/token-perf-aarch64-apple-darwin.tar.gz | tar -xz
+# macOS (인텔)
+curl -fsSL https://github.com/M1nu0x0/token-perf/releases/latest/download/token-perf-x86_64-apple-darwin.tar.gz | tar -xz
+# Linux (x86_64)
+curl -fsSL https://github.com/M1nu0x0/token-perf/releases/latest/download/token-perf-x86_64-unknown-linux-gnu.tar.gz | tar -xz
+```
+
+현재 디렉터리에 `token-perf` 바이너리가 나온다. `PATH` 에 있는 곳으로 옮기면 된다.
+각 아카이브 옆에 `.sha256` 이 함께 올라간다.
+
 ## 쓰는 법
 
 ```sh
@@ -60,6 +76,8 @@ token-perf --lang ja sessions   # 이번 실행부터 일본어, 설정에 저�
 언어를 잃지 않는다. `--help` 는 영어로 남는다.
 
 ## 빌드
+
+직접 빌드하려면:
 
 ```sh
 (cd web && npm ci && npm run build)   # UI 를 먼저 빌드해야 바이너리에 embed 된다
