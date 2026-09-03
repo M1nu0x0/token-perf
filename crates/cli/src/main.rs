@@ -1,13 +1,15 @@
+mod lang;
+mod table;
+
 use std::cmp::Reverse;
 
 use clap::{Parser, Subcommand};
 use rust_i18n::t;
-use token_perf_core::{common::analyze, store::Store, sync_and_load};
+use table::Align;
+use token_perf_core::{common::analyze, sync_and_load};
 
 // `--help` stays English: clap doc comments are compile-time literals.
 rust_i18n::i18n!("locales", fallback = "en");
-
-const LANGS: [&str; 3] = ["en", "ko", "ja"];
 
 #[derive(Parser)]
 #[command(
@@ -60,6 +62,12 @@ enum Command {
         #[arg(long)]
         no_open: bool,
     },
+    /// Show persisted settings, or change one
+    Config {
+        /// Draw tables with Unicode borders instead of plain aligned columns (on/off)
+        #[arg(long, value_parser = clap::builder::BoolishValueParser::new())]
+        pretty: Option<bool>,
+    },
 }
 
 /// Format only: month and day ranges, not whether the day exists in that month.
@@ -84,53 +92,14 @@ fn in_range(started_at: &str, since: Option<&str>, until: Option<&str>) -> bool 
     since.is_none_or(|s| day >= s) && until.is_none_or(|u| day <= u)
 }
 
-fn supported(code: &str) -> Option<&'static str> {
-    let short = code.split(['_', '.', '-']).next().unwrap_or_default();
-    LANGS.into_iter().find(|l| *l == short)
-}
-
-fn resolve_lang(flag: Option<&str>, saved: Option<&str>, env: Option<&str>) -> &'static str {
-    flag.or(saved).or(env).and_then(supported).unwrap_or("en")
-}
-
-/// POSIX: LC_ALL overrides LANG.
-fn env_lang(lc_all: Option<&str>, lang: Option<&str>) -> Option<String> {
-    lc_all
-        .or(lang)
-        .filter(|v| !v.is_empty())
-        .map(str::to_string)
-}
-
-fn process_lang() -> Option<String> {
-    env_lang(
-        std::env::var("LC_ALL").ok().as_deref(),
-        std::env::var("LANG").ok().as_deref(),
-    )
-}
-
-/// Set twice so a store failure still reports in a sensible language.
-fn apply_lang(store: &Store, flag: Option<&str>) -> String {
-    let saved = store.setting("lang").ok().flatten();
-    let lang = resolve_lang(flag, saved.as_deref(), process_lang().as_deref());
-    if flag.is_some() {
-        store.set_setting("lang", lang).ok();
-    }
-    rust_i18n::set_locale(lang);
-    lang.to_string()
-}
-
-/// A typo must not erase a stored preference: an unknown code is dropped, not saved.
-fn split_lang_flag(flag: Option<&str>) -> (Option<&str>, Option<&str>) {
-    match flag {
-        Some(code) if supported(code).is_none() => (None, Some(code)),
-        code => (code, None),
-    }
-}
-
 fn main() {
     let cli = Cli::parse();
-    let (flag, unknown) = split_lang_flag(cli.lang.as_deref());
-    rust_i18n::set_locale(resolve_lang(flag, None, process_lang().as_deref()));
+    let (flag, unknown) = lang::split_lang_flag(cli.lang.as_deref());
+    rust_i18n::set_locale(lang::resolve_lang(
+        flag,
+        None,
+        lang::process_lang().as_deref(),
+    ));
 
     let (store, sessions, scanned) = match sync_and_load(cli.rescan) {
         Ok(loaded) => loaded,
@@ -139,7 +108,7 @@ fn main() {
             std::process::exit(1);
         }
     };
-    let lang = apply_lang(&store, flag);
+    let lang = lang::apply_lang(&store, flag);
     if let Some(code) = unknown {
         eprintln!("{}", t!("unknown_lang", code = code));
     }
@@ -157,11 +126,18 @@ fn main() {
     if scanned.files_skipped > 0 {
         eprintln!("{}", t!("skipped", count = scanned.files_skipped));
     }
-    // serve must start with no sessions: CI has no ~/.claude at all.
-    if sessions.is_empty() && !matches!(cli.command, Command::Serve { .. }) {
+    // serve and config must start with no sessions: CI has no ~/.claude at all.
+    if sessions.is_empty() && !matches!(cli.command, Command::Serve { .. } | Command::Config { .. })
+    {
         eprintln!("{}", t!("no_sessions"));
         std::process::exit(1);
     }
+
+    let pretty_flag = match &cli.command {
+        Command::Config { pretty } => *pretty,
+        _ => None,
+    };
+    let pretty = table::apply_pretty(&store, pretty_flag);
 
     match cli.command {
         Command::Sessions { top, all } => {
@@ -172,23 +148,38 @@ fn main() {
                 .collect();
             reports.sort_by_key(|r| Reverse(r.totals.cache_read));
 
-            println!(
-                "{:<8} {:<10} {:>6} {:>10} {:>10}  {:<24} TITLE",
-                "ID", "DATE", "CALLS", "CACHE_RD", "OUTPUT", "PROJECT"
+            let rows: Vec<Vec<String>> = reports
+                .iter()
+                .take(top)
+                .map(|r| {
+                    vec![
+                        short(&r.session).to_string(),
+                        r.started_at.get(..10).unwrap_or("").to_string(),
+                        r.call_count.to_string(),
+                        human(r.totals.cache_read),
+                        human(r.totals.output),
+                        basename(&r.project).to_string(),
+                        format!("{}{}", if r.parent.is_some() { "↳ " } else { "" }, r.title),
+                    ]
+                })
+                .collect();
+            table::print_table(
+                pretty,
+                "",
+                &[
+                    "ID", "DATE", "CALLS", "CACHE_RD", "OUTPUT", "PROJECT", "TITLE",
+                ],
+                &[
+                    Align::Left,
+                    Align::Left,
+                    Align::Right,
+                    Align::Right,
+                    Align::Right,
+                    Align::Left,
+                ],
+                &rows,
+                true,
             );
-            for r in reports.iter().take(top) {
-                println!(
-                    "{:<8} {:<10} {:>6} {:>10} {:>10}  {:<24} {}{}",
-                    short(&r.session),
-                    r.started_at.get(..10).unwrap_or(""),
-                    r.call_count,
-                    human(r.totals.cache_read),
-                    human(r.totals.output),
-                    basename(&r.project),
-                    if r.parent.is_some() { "↳ " } else { "" },
-                    r.title
-                );
-            }
         }
 
         Command::Report { session, top } => {
@@ -283,38 +274,53 @@ fn main() {
             println!();
 
             println!("{}", t!("tool_residual"));
-            println!(
-                "  {:<38} {:>6} {:>10} {:>10}",
-                "TOOL", "CALLS", "ADDED", "RESIDUAL"
+            let tool_rows: Vec<Vec<String>> = r
+                .tools
+                .iter()
+                .take(top)
+                .map(|t| {
+                    vec![
+                        t.name.clone(),
+                        t.calls.to_string(),
+                        human(t.added),
+                        human(t.residual),
+                    ]
+                })
+                .collect();
+            table::print_table(
+                pretty,
+                "  ",
+                &["TOOL", "CALLS", "ADDED", "RESIDUAL"],
+                &[Align::Left, Align::Right, Align::Right, Align::Right],
+                &tool_rows,
+                false,
             );
-            for t in r.tools.iter().take(top) {
-                println!(
-                    "  {:<38} {:>6} {:>10} {:>10}",
-                    t.name,
-                    t.calls,
-                    human(t.added),
-                    human(t.residual)
-                );
-            }
             println!();
 
             println!("{}", t!("worst_calls"));
-            println!(
-                "  {:<6} {:>10} {:>10} {:>10}  TOOLS",
-                "CALL", "CONTEXT", "GREW", "RESIDUAL"
-            );
             let mut worst: Vec<_> = r.calls.iter().collect();
             worst.sort_by_key(|c| Reverse(c.residual));
-            for c in worst.iter().take(top) {
-                println!(
-                    "  {:<6} {:>10} {:>10} {:>10}  {}",
-                    c.index,
-                    human(c.context),
-                    human(c.grew_by),
-                    human(c.residual),
-                    c.tools.join(", ")
-                );
-            }
+            let call_rows: Vec<Vec<String>> = worst
+                .iter()
+                .take(top)
+                .map(|c| {
+                    vec![
+                        c.index.to_string(),
+                        human(c.context),
+                        human(c.grew_by),
+                        human(c.residual),
+                        c.tools.join(", "),
+                    ]
+                })
+                .collect();
+            table::print_table(
+                pretty,
+                "  ",
+                &["CALL", "CONTEXT", "GREW", "RESIDUAL", "TOOLS"],
+                &[Align::Left, Align::Right, Align::Right, Align::Right],
+                &call_rows,
+                true,
+            );
         }
 
         Command::Summary { since, until } => {
@@ -348,34 +354,64 @@ fn main() {
             println!();
 
             println!("{}", t!("summary_length"));
-            println!("  {:<38} {:>10} {:>7}", "LENGTH", "SESSIONS", "RATIO");
-            for b in &d.amplification {
-                let label = match b.max {
-                    Some(max) => format!("{}-{}", b.min, max),
-                    None => format!("{}+", b.min),
-                };
-                println!("  {:<38} {:>10} {:>6.1}x", label, b.sessions, b.ratio);
-            }
+            let length_rows: Vec<Vec<String>> = d
+                .amplification
+                .iter()
+                .map(|b| {
+                    let label = match b.max {
+                        Some(max) => format!("{}-{}", b.min, max),
+                        None => format!("{}+", b.min),
+                    };
+                    vec![label, b.sessions.to_string(), format!("{:.1}x", b.ratio)]
+                })
+                .collect();
+            table::print_table(
+                pretty,
+                "  ",
+                &["LENGTH", "SESSIONS", "RATIO"],
+                &[Align::Left, Align::Right, Align::Right],
+                &length_rows,
+                false,
+            );
             println!();
 
             println!("{}", t!("summary_tools"));
-            println!("  {:<38} {:>10} {:>7}", "TOOL", "ADDED", "SHARE");
-            for t in &d.top_tools {
-                println!("  {:<38} {:>10} {:>6.0}%", t.name, human(t.added), t.pct);
-            }
+            let tool_rows: Vec<Vec<String>> = d
+                .top_tools
+                .iter()
+                .map(|t| vec![t.name.clone(), human(t.added), format!("{:.0}%", t.pct)])
+                .collect();
+            table::print_table(
+                pretty,
+                "  ",
+                &["TOOL", "ADDED", "SHARE"],
+                &[Align::Left, Align::Right, Align::Right],
+                &tool_rows,
+                false,
+            );
             println!();
 
             println!("{}", t!("summary_top_sessions"));
-            println!("  {:<8} {:>6} {:>10}  TITLE", "ID", "CALLS", "RESIDUAL");
-            for s in &d.top_sessions {
-                println!(
-                    "  {:<8} {:>6} {:>10}  {}",
-                    short(&s.session),
-                    s.call_count,
-                    human(s.residual),
-                    s.title
-                );
-            }
+            let session_rows: Vec<Vec<String>> = d
+                .top_sessions
+                .iter()
+                .map(|s| {
+                    vec![
+                        short(&s.session).to_string(),
+                        s.call_count.to_string(),
+                        human(s.residual),
+                        s.title.clone(),
+                    ]
+                })
+                .collect();
+            table::print_table(
+                pretty,
+                "  ",
+                &["ID", "CALLS", "RESIDUAL", "TITLE"],
+                &[Align::Left, Align::Right, Align::Right],
+                &session_rows,
+                true,
+            );
             println!();
 
             println!(
@@ -385,6 +421,11 @@ fn main() {
         }
 
         Command::Serve { port, no_open } => serve(sessions, lang, port.unwrap_or(0), !no_open),
+
+        Command::Config { .. } => {
+            println!("lang    {lang}");
+            println!("pretty  {}", if pretty { "on" } else { "off" });
+        }
     }
 }
 
@@ -449,84 +490,5 @@ fn human(n: u64) -> String {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::{env_lang, in_range, resolve_lang, split_lang_flag, valid_date};
-
-    #[test]
-    fn a_range_includes_both_of_its_end_days_whole() {
-        let day = |d: &str| format!("{d}T23:59:59.999Z");
-        assert!(in_range(
-            &day("2026-08-01"),
-            Some("2026-08-01"),
-            Some("2026-08-31")
-        ));
-        assert!(in_range(
-            &day("2026-08-31"),
-            Some("2026-08-01"),
-            Some("2026-08-31")
-        ));
-        assert!(!in_range(&day("2026-07-31"), Some("2026-08-01"), None));
-        assert!(!in_range(&day("2026-09-01"), None, Some("2026-08-31")));
-    }
-
-    #[test]
-    fn without_bounds_everything_stays_but_a_bound_drops_the_undated() {
-        assert!(in_range("", None, None));
-        assert!(in_range("2026-08", None, None));
-        assert!(!in_range("", Some("2026-08-01"), None));
-        assert!(!in_range("2026-08", None, Some("2026-08-31")));
-    }
-
-    #[test]
-    fn a_date_is_ten_characters_of_yyyy_mm_dd() {
-        assert!(valid_date("2026-08-01"));
-        // Format only: the calendar itself is not checked.
-        assert!(valid_date("2026-02-31"));
-        assert!(!valid_date("2026-13-99"));
-        assert!(!valid_date("2026-00-01"));
-        assert!(!valid_date("2026-8-1"));
-        assert!(!valid_date("2026/08/01"));
-        assert!(!valid_date("2026-08-01T00:00:00Z"));
-        assert!(!valid_date(""));
-    }
-
-    #[test]
-    fn the_flag_beats_the_setting_and_the_setting_beats_the_environment() {
-        assert_eq!(resolve_lang(Some("ja"), Some("ko"), Some("en_US")), "ja");
-        assert_eq!(resolve_lang(None, Some("ko"), Some("en_US")), "ko");
-        assert_eq!(resolve_lang(None, None, Some("ja_JP.UTF-8")), "ja");
-        assert_eq!(resolve_lang(None, None, None), "en");
-    }
-
-    #[test]
-    fn an_unsupported_code_falls_back_to_english_without_trying_the_next_source() {
-        assert_eq!(resolve_lang(None, Some("fr"), Some("ko_KR")), "en");
-        assert_eq!(resolve_lang(None, None, Some("C")), "en");
-        assert_eq!(resolve_lang(None, None, Some("zh_CN.UTF-8")), "en");
-    }
-
-    #[test]
-    fn an_unsupported_flag_is_dropped_but_kept_for_the_warning() {
-        assert_eq!(split_lang_flag(Some("fr")), (None, Some("fr")));
-        assert_eq!(split_lang_flag(Some("ja")), (Some("ja"), None));
-        assert_eq!(split_lang_flag(None), (None, None));
-    }
-
-    #[test]
-    fn lc_all_outranks_lang() {
-        assert_eq!(
-            env_lang(Some("ja_JP.UTF-8"), Some("ko_KR")).as_deref(),
-            Some("ja_JP.UTF-8")
-        );
-        assert_eq!(env_lang(None, Some("ko_KR")).as_deref(), Some("ko_KR"));
-        assert_eq!(env_lang(None, None), None);
-        // An empty LC_ALL is a set variable, so LANG never gets a turn.
-        assert_eq!(env_lang(Some(""), Some("ko_KR")), None);
-    }
-
-    #[test]
-    fn a_locale_carries_a_region_and_an_encoding() {
-        assert_eq!(resolve_lang(None, None, Some("ko_KR.UTF-8")), "ko");
-        assert_eq!(resolve_lang(Some("en-US"), None, None), "en");
-    }
-}
+#[path = "main_tests.rs"]
+mod tests;
