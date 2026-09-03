@@ -4,10 +4,8 @@ use crate::sources::claude::ClaudeCode;
 const LINE_A: &str = r#"{"type":"assistant","timestamp":"t0","cwd":"/p","message":{"id":"m1","model":"opus","usage":{"input_tokens":1,"cache_read_input_tokens":100,"output_tokens":5},"content":[{"type":"tool_use","id":"t1","name":"Bash"}]}}"#;
 const LINE_B: &str = r#"{"type":"user","timestamp":"t1","message":{"content":[{"type":"tool_result","tool_use_id":"t1","content":"hello"}]}}"#;
 const LINE_C: &str = r#"{"type":"assistant","timestamp":"t2","cwd":"/p","message":{"id":"m2","model":"opus","usage":{"input_tokens":2,"cache_read_input_tokens":200,"output_tokens":7},"content":[]}}"#;
-/// First line of response m3; the billing happens here.
-const SPLIT_1: &str = r#"{"type":"assistant","timestamp":"t3","message":{"id":"m3","model":"opus","usage":{"input_tokens":2,"cache_read_input_tokens":300,"output_tokens":7},"content":[{"type":"thinking"}]}}"#;
-/// Second line of the same response: no billing, but an error mark and a tool_use.
-const SPLIT_2: &str = r#"{"type":"assistant","timestamp":"t3","isApiErrorMessage":true,"message":{"id":"m3","model":"opus","usage":{"input_tokens":0,"output_tokens":0},"content":[{"type":"tool_use","id":"t9","name":"Read"}]}}"#;
+const SPLIT_1_BILLED: &str = r#"{"type":"assistant","timestamp":"t3","message":{"id":"m3","model":"opus","usage":{"input_tokens":2,"cache_read_input_tokens":300,"output_tokens":7},"content":[{"type":"thinking"}]}}"#;
+const SPLIT_2_UNBILLED_ERROR: &str = r#"{"type":"assistant","timestamp":"t3","isApiErrorMessage":true,"message":{"id":"m3","model":"opus","usage":{"input_tokens":0,"output_tokens":0},"content":[{"type":"tool_use","id":"t9","name":"Read"}]}}"#;
 
 fn temp(name: &str) -> PathBuf {
     std::env::temp_dir().join(format!(
@@ -100,7 +98,6 @@ fn a_same_size_rewrite_is_rescanned() {
         format!("{}\n", LINE_A.replace(r#""id":"m1""#, r#""id":"m3""#)),
     )
     .unwrap();
-    // Skewed by hand rather than trusting the filesystem clock.
     store
         .conn
         .execute("UPDATE file_cursor SET mtime_nanos = 0", [])
@@ -206,10 +203,14 @@ fn a_fresh_db_is_born_at_the_current_schema_version() {
 #[test]
 fn a_scan_boundary_never_splits_one_response() {
     let path = temp("split-response");
-    std::fs::write(&path, format!("{LINE_A}\n{SPLIT_1}\n")).unwrap();
+    std::fs::write(&path, format!("{LINE_A}\n{SPLIT_1_BILLED}\n")).unwrap();
     let mut store = Store::open_in_memory().unwrap();
     store.sync_file(&ClaudeCode, &path).unwrap();
-    std::fs::write(&path, format!("{LINE_A}\n{SPLIT_1}\n{SPLIT_2}\n")).unwrap();
+    std::fs::write(
+        &path,
+        format!("{LINE_A}\n{SPLIT_1_BILLED}\n{SPLIT_2_UNBILLED_ERROR}\n"),
+    )
+    .unwrap();
 
     store.sync_file(&ClaudeCode, &path).unwrap();
 
@@ -235,13 +236,21 @@ fn a_scan_boundary_never_splits_one_response() {
 #[test]
 fn a_rewound_failure_is_not_counted_twice_when_the_file_grows_again() {
     let path = temp("split-response-regrow");
-    std::fs::write(&path, format!("{LINE_A}\n{SPLIT_1}\n")).unwrap();
+    std::fs::write(&path, format!("{LINE_A}\n{SPLIT_1_BILLED}\n")).unwrap();
     let mut store = Store::open_in_memory().unwrap();
     store.sync_file(&ClaudeCode, &path).unwrap();
-    std::fs::write(&path, format!("{LINE_A}\n{SPLIT_1}\n{SPLIT_2}\n")).unwrap();
+    std::fs::write(
+        &path,
+        format!("{LINE_A}\n{SPLIT_1_BILLED}\n{SPLIT_2_UNBILLED_ERROR}\n"),
+    )
+    .unwrap();
     store.sync_file(&ClaudeCode, &path).unwrap();
 
-    std::fs::write(&path, format!("{LINE_A}\n{SPLIT_1}\n{SPLIT_2}\n{LINE_B}\n")).unwrap();
+    std::fs::write(
+        &path,
+        format!("{LINE_A}\n{SPLIT_1_BILLED}\n{SPLIT_2_UNBILLED_ERROR}\n{LINE_B}\n"),
+    )
+    .unwrap();
     store.sync_file(&ClaudeCode, &path).unwrap();
 
     assert_eq!(
@@ -301,14 +310,13 @@ fn a_file_with_an_unfinished_tail_is_not_marked_as_fully_read() {
 
 #[test]
 fn a_repeated_error_line_at_a_scan_boundary_matches_a_full_scan() {
-    // The unbilled error line is in the rewind range, so every scan re-reads it.
     let path = temp("boundary-error");
     let mut store = Store::open_in_memory().unwrap();
     for lines in [
-        format!("{LINE_A}\n{SPLIT_1}\n"),
-        format!("{LINE_A}\n{SPLIT_1}\n{SPLIT_2}\n"),
-        format!("{LINE_A}\n{SPLIT_1}\n{SPLIT_2}\n{LINE_B}\n"),
-        format!("{LINE_A}\n{SPLIT_1}\n{SPLIT_2}\n{LINE_B}\n{LINE_C}\n"),
+        format!("{LINE_A}\n{SPLIT_1_BILLED}\n"),
+        format!("{LINE_A}\n{SPLIT_1_BILLED}\n{SPLIT_2_UNBILLED_ERROR}\n"),
+        format!("{LINE_A}\n{SPLIT_1_BILLED}\n{SPLIT_2_UNBILLED_ERROR}\n{LINE_B}\n"),
+        format!("{LINE_A}\n{SPLIT_1_BILLED}\n{SPLIT_2_UNBILLED_ERROR}\n{LINE_B}\n{LINE_C}\n"),
     ] {
         std::fs::write(&path, lines).unwrap();
         store.sync_file(&ClaudeCode, &path).unwrap();
@@ -325,11 +333,10 @@ fn a_repeated_error_line_at_a_scan_boundary_matches_a_full_scan() {
     assert_eq!(incr.failures.len(), 1);
     assert_eq!(incr.calls.len(), full.calls.len());
 
-    // The asserts above pass even if the orphan-error UPDATE is a silent no-op.
     let m3 = incr.calls.iter().find(|c| c.id == "m3").unwrap();
     assert!(
         m3.error.is_some(),
-        "the rewound range's error must reach call.error"
+        "the rewound range's error must reach call.error, not just its failure count"
     );
 
     std::fs::remove_file(&path).ok();
@@ -384,7 +391,11 @@ fn two_processes_syncing_the_same_file_do_not_double_the_failures() {
     let dir = std::env::temp_dir().join(format!("token-perf-concurrent-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let path = dir.join("s.jsonl");
-    std::fs::write(&path, format!("{LINE_A}\n{SPLIT_1}\n{SPLIT_2}\n")).unwrap();
+    std::fs::write(
+        &path,
+        format!("{LINE_A}\n{SPLIT_1_BILLED}\n{SPLIT_2_UNBILLED_ERROR}\n"),
+    )
+    .unwrap();
     let db = dir.join("db.sqlite");
     std::fs::remove_file(&db).ok();
     Store::open(&db).unwrap();
@@ -420,14 +431,16 @@ fn a_scan_boundary_between_the_marker_and_its_call_keeps_the_flag() {
     std::fs::write(&path, format!("{LINE_A}\n{BOUNDARY}\n{LINE_C}\n")).unwrap();
     let mut store = Store::open_in_memory().unwrap();
     store.sync_file(&ClaudeCode, &path).unwrap();
-    // The cursor rewound to LINE_C, so the re-read never sees the marker again.
     std::fs::write(&path, format!("{LINE_A}\n{BOUNDARY}\n{LINE_C}\n{LINE_B}\n")).unwrap();
 
     store.sync_file(&ClaudeCode, &path).unwrap();
 
     let calls = &store.sessions().unwrap()[0].calls;
     assert!(!calls[0].compacted);
-    assert!(calls[1].compacted, "the flag must survive the re-read");
+    assert!(
+        calls[1].compacted,
+        "the flag must survive the re-read even though the cursor rewound past the marker"
+    );
 
     std::fs::remove_file(&path).ok();
 }

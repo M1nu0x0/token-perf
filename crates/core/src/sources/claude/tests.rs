@@ -10,7 +10,6 @@ impl Transcript {
     fn new(name: &str, lines: &[&str]) -> Self {
         let path =
             std::env::temp_dir().join(format!("token-perf-{name}-{}.jsonl", std::process::id()));
-        // Without a trailing newline the last line reads as still being written.
         let mut body = lines.join("\n");
         body.push('\n');
         std::fs::write(&path, body).expect("write temp file");
@@ -30,10 +29,9 @@ impl Drop for Transcript {
 
 #[test]
 fn truncates_the_input_preview_on_a_char_boundary() {
-    // 300 Hangul chars, so the preview cut lands mid-multibyte.
-    let arg = "가".repeat(300);
+    let arg_landing_the_cut_mid_multibyte = "가".repeat(300);
     let line = format!(
-        r#"{{"type":"assistant","timestamp":"t0","message":{{"id":"m1","model":"opus","usage":{{"input_tokens":1,"output_tokens":1}},"content":[{{"type":"tool_use","id":"t1","name":"Read","input":{{"p":"{arg}"}}}}]}}}}"#
+        r#"{{"type":"assistant","timestamp":"t0","message":{{"id":"m1","model":"opus","usage":{{"input_tokens":1,"output_tokens":1}},"content":[{{"type":"tool_use","id":"t1","name":"Read","input":{{"p":"{arg_landing_the_cut_mid_multibyte}"}}}}]}}}}"#
     );
     let file = Transcript::new("preview", &[&line]);
 

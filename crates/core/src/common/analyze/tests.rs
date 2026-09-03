@@ -35,7 +35,6 @@ fn call(cache_read: u64, cache_write: u64, output: u64, tool: &str, chars: usize
     }
 }
 
-/// Context 100 -> 1000 -> 1100. First call runs Bash, second Read.
 fn three_call_session() -> Session {
     Session {
         id: "s".into(),
@@ -178,14 +177,15 @@ fn tldr_aggregates_across_sessions() {
 
     assert_eq!(t.sessions, 2);
     assert_eq!(t.calls, 6);
-    // 4200 cache_read out of 4420 billed.
     assert!(
         (t.cache_read_pct - 95.02).abs() < 0.01,
-        "{}",
+        "4200 cache_read out of 4420 billed: {}",
         t.cache_read_pct
     );
-    // A 3-call session lands in the <=5 bucket.
-    assert_eq!(t.amplification[0].sessions, 2);
+    assert_eq!(
+        t.amplification[0].sessions, 2,
+        "a 3-call session lands in the <=5 bucket"
+    );
     assert!((t.amplification[0].ratio - 890.0 / 990.0).abs() < 1e-9);
     assert_eq!(t.amplification[2].sessions, 0, "no session has 41+ calls");
     assert_eq!(t.top_tools[0].name, "Bash");
@@ -198,8 +198,6 @@ fn tldr_aggregates_across_sessions() {
     );
 }
 
-/// Context 1000 -> 2000 -> the drop -> drop + 1000. Call 1 grows by 1000, so its
-/// residual is 2000 if the drop is not a compaction and 0 if it is.
 fn drop_session(read: u64, write: u64) -> Session {
     Session {
         calls: vec![
