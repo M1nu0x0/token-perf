@@ -144,9 +144,9 @@ fn main() {
             let mut reports: Vec<_> = sessions
                 .iter()
                 .filter(|s| all || s.parent.is_none())
-                .map(analyze::session)
+                .map(|s| analyze::rollup(s, &sessions))
                 .collect();
-            reports.sort_by_key(|r| Reverse(r.totals.cache_read));
+            reports.sort_by_key(|r| Reverse(r.totals.cache_read + r.subagents.totals.cache_read));
 
             let rows: Vec<Vec<String>> = reports
                 .iter()
@@ -157,6 +157,11 @@ fn main() {
                         r.started_at.get(..10).unwrap_or("").to_string(),
                         r.call_count.to_string(),
                         human(r.totals.cache_read),
+                        // Blank, not 0: most sessions spawn nothing.
+                        match r.subagents.count {
+                            0 => String::new(),
+                            _ => human(r.subagents.totals.cache_read),
+                        },
                         human(r.totals.output),
                         basename(&r.project).to_string(),
                         format!("{}{}", if r.parent.is_some() { "↳ " } else { "" }, r.title),
@@ -167,11 +172,12 @@ fn main() {
                 pretty,
                 "",
                 &[
-                    "ID", "DATE", "CALLS", "CACHE_RD", "OUTPUT", "PROJECT", "TITLE",
+                    "ID", "DATE", "CALLS", "CACHE_RD", "SUB_RD", "OUTPUT", "PROJECT", "TITLE",
                 ],
                 &[
                     Align::Left,
                     Align::Left,
+                    Align::Right,
                     Align::Right,
                     Align::Right,
                     Align::Right,
@@ -214,7 +220,7 @@ fn main() {
                 std::process::exit(1);
             };
 
-            let r = analyze::session(target);
+            let r = analyze::rollup(target, &sessions);
             println!("session  {}  ({})", r.session, r.source);
             if !r.title.is_empty() {
                 println!("title    {}", r.title);
@@ -272,6 +278,88 @@ fn main() {
                 );
             }
             println!();
+
+            if r.subagents.count > 0 {
+                let sub = &r.subagents;
+                let mut all = r.totals;
+                all += sub.totals;
+                println!("{}", t!("subagents", count = sub.count));
+                println!(
+                    "  {}",
+                    t!(
+                        "totals",
+                        calls = sub.call_count,
+                        output = human(sub.totals.output),
+                        cache_read = human(sub.totals.cache_read),
+                        cache_write = human(sub.totals.cache_write())
+                    )
+                );
+                println!(
+                    "  {}",
+                    t!(
+                        "subagents_total",
+                        calls = r.call_count + sub.call_count,
+                        output = human(all.output),
+                        cache_read = human(all.cache_read),
+                        cache_write = human(all.cache_write())
+                    )
+                );
+                println!();
+                let model_rows: Vec<Vec<String>> = sub
+                    .by_model
+                    .iter()
+                    .map(|m| {
+                        vec![
+                            m.model.clone(),
+                            m.calls.to_string(),
+                            human(m.totals.cache_read),
+                            human(m.totals.cache_write()),
+                            human(m.totals.output),
+                        ]
+                    })
+                    .collect();
+                table::print_table(
+                    pretty,
+                    "  ",
+                    &["MODEL", "CALLS", "CACHE_RD", "CACHE_WR", "OUTPUT"],
+                    &[
+                        Align::Left,
+                        Align::Right,
+                        Align::Right,
+                        Align::Right,
+                        Align::Right,
+                    ],
+                    &model_rows,
+                    false,
+                );
+                println!();
+
+                println!("{}", t!("subagents_top"));
+                let subagent = t!("subagent");
+                let child_rows: Vec<Vec<String>> = sub
+                    .children
+                    .iter()
+                    .take(top)
+                    .map(|c| {
+                        vec![
+                            short(&c.session).to_string(),
+                            c.call_count.to_string(),
+                            human(c.totals.cache_read),
+                            human(c.residual),
+                            c.agent_type.clone().unwrap_or_else(|| subagent.to_string()),
+                        ]
+                    })
+                    .collect();
+                table::print_table(
+                    pretty,
+                    "  ",
+                    &["ID", "CALLS", "CACHE_RD", "RESIDUAL", "AGENT"],
+                    &[Align::Left, Align::Right, Align::Right, Align::Right],
+                    &child_rows,
+                    true,
+                );
+                println!();
+            }
 
             println!("{}", t!("tool_residual"));
             let tool_rows: Vec<Vec<String>> = r
@@ -400,6 +488,11 @@ fn main() {
                         short(&s.session).to_string(),
                         s.call_count.to_string(),
                         human(s.residual),
+                        // Blank, not 0: most sessions spawn nothing.
+                        match s.sub_calls {
+                            0 => String::new(),
+                            _ => human(s.sub_residual),
+                        },
                         s.title.clone(),
                     ]
                 })
@@ -407,8 +500,8 @@ fn main() {
             table::print_table(
                 pretty,
                 "  ",
-                &["ID", "CALLS", "RESIDUAL", "TITLE"],
-                &[Align::Left, Align::Right, Align::Right],
+                &["ID", "CALLS", "RESIDUAL", "SUB", "TITLE"],
+                &[Align::Left, Align::Right, Align::Right, Align::Right],
                 &session_rows,
                 true,
             );
@@ -472,8 +565,11 @@ fn open_browser(url: &str) {
     command.spawn().ok();
 }
 
+/// A subagent id is `agent-` plus hex, so cutting at 8 leaves every one of them
+/// reading `agent-a`. The prefix stays: the id has to paste back into `report`.
 fn short(id: &str) -> &str {
-    id.get(..8).unwrap_or(id)
+    let cut = if id.starts_with("agent-") { 14 } else { 8 };
+    id.get(..cut).unwrap_or(id)
 }
 
 fn basename(path: &str) -> &str {
