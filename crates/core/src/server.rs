@@ -39,8 +39,12 @@ async fn config(State(app): Sessions) -> Json<serde_json::Value> {
 }
 
 async fn list(State(app): Sessions) -> Json<Vec<analyze::Report>> {
-    let mut reports: Vec<_> = app.sessions.iter().map(analyze::session).collect();
-    reports.sort_by_key(|r| Reverse(r.totals.cache_read));
+    let mut reports: Vec<_> = app
+        .sessions
+        .iter()
+        .map(|s| analyze::rollup(s, &app.sessions))
+        .collect();
+    reports.sort_by_key(|r| Reverse(r.totals.cache_read + r.subagents.totals.cache_read));
     for report in &mut reports {
         report.calls.clear();
     }
@@ -53,7 +57,7 @@ async fn tldr(State(app): Sessions) -> Json<analyze::Tldr> {
 
 async fn report(State(app): Sessions, Path(id): Path<String>) -> Response {
     match app.sessions.iter().find(|s| s.id == id) {
-        Some(s) => Json(analyze::session(s)).into_response(),
+        Some(s) => Json(analyze::rollup(s, &app.sessions)).into_response(),
         None => (StatusCode::NOT_FOUND, "no such session").into_response(),
     }
 }

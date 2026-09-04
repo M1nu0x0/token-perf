@@ -64,6 +64,10 @@ token-perf config --pretty on # 이후로 표에 테두리를 그린다. `config
 UI 를 고칠 때는 `token-perf serve --port 5177` 를 띄워 둔 채 `cd web && npm run dev` —
 vite 개발 서버가 `/api` 를 5177 로 프록시한다.
 
+서브에이전트는 부모의 툴 호출 하나이므로 그 토큰도 부모의 청구서에 들어간다. `sessions` 는
+`SUB_RD` 열로 따로 보여주면서 둘을 합쳐 정렬하고, `summary` 는 부모 행에 얹으며, 부모를 대상으로
+한 `report` 에는 모델별 분리와 가장 많이 다시 읽은 자식을 담은 `서브에이전트` 절이 붙는다.
+
 ### 언어
 
 en · ko · ja 를 지원한다. CLI 출력과 웹 UI 가 같은 언어를 쓴다.

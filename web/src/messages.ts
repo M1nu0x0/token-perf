@@ -31,6 +31,10 @@ const en = {
   depth: (n: number) => ` · depth ${n}`,
   totals: (calls: number, output: string, read: string) =>
     `${calls} calls · ${output} output · cache re-read <b>${read}</b>`,
+  subagents: (count: number, calls: number, output: string, read: string) =>
+    `Subagents (${count}) — ${calls} calls · ${output} output · cache re-read <b>${read}</b>`,
+  withSubagents: (calls: number, read: string) =>
+    `With subagents — ${calls} calls · cache re-read <b>${read}</b>`,
   baseline: (baseline: string, billed: string) =>
     `Baseline context ${baseline} → billed ${billed} across the session`,
   cacheWrites: (write5m: string, write1h: string) =>
@@ -69,6 +73,10 @@ const ko: typeof en = {
   depth: (n) => ` · 깊이 ${n}`,
   totals: (calls, output, read) =>
     `호출 ${calls}회 · 출력 ${output} · 캐시 재읽기 <b>${read}</b>`,
+  subagents: (count, calls, output, read) =>
+    `서브에이전트 ${count}개 — 호출 ${calls}회 · 출력 ${output} · 캐시 재읽기 <b>${read}</b>`,
+  withSubagents: (calls, read) =>
+    `서브에이전트 포함 — 호출 ${calls}회 · 캐시 재읽기 <b>${read}</b>`,
   baseline: (baseline, billed) => `기저 컨텍스트 ${baseline} → 세션 전체에서 ${billed} 청구`,
   cacheWrites: (write5m, write1h) =>
     `캐시 쓰기 — 5분 ${write5m} · 1시간 ${write1h} (1시간은 입력 단가의 2배)`,
@@ -106,6 +114,10 @@ const ja: typeof en = {
   depth: (n) => ` · 深さ ${n}`,
   totals: (calls, output, read) =>
     `呼び出し ${calls} 回 · 出力 ${output} · キャッシュ再読み取り <b>${read}</b>`,
+  subagents: (count, calls, output, read) =>
+    `サブエージェント ${count} 件 — 呼び出し ${calls} 回 · 出力 ${output} · キャッシュ再読み取り <b>${read}</b>`,
+  withSubagents: (calls, read) =>
+    `サブエージェント込み — 呼び出し ${calls} 回 · キャッシュ再読み取り <b>${read}</b>`,
   baseline: (baseline, billed) => `ベースラインコンテキスト ${baseline} → セッション全体で ${billed} が請求されています`,
   cacheWrites: (write5m, write1h) =>
     `キャッシュ書き込み — 5分 ${write5m} · 1時間 ${write1h} (1時間は入力単価の2倍)`,

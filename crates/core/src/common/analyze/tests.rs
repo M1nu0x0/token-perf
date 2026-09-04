@@ -249,3 +249,60 @@ fn a_deep_drop_without_cache_writes_is_not_a_compaction() {
         "re-billed to the session end"
     );
 }
+
+fn child_of(parent: &str, id: &str, model: &str) -> Session {
+    let mut s = Session {
+        id: id.into(),
+        parent: Some(parent.into()),
+        agent_type: Some("general-purpose".into()),
+        ..three_call_session()
+    };
+    for c in &mut s.calls {
+        c.model = model.into();
+    }
+    s
+}
+
+#[test]
+fn rollup_sums_the_children_into_the_parent() {
+    let all = vec![
+        three_call_session(),
+        child_of("s", "c1", "opus"),
+        child_of("s", "c2", "sonnet"),
+    ];
+
+    let r = rollup(&all[0], &all);
+
+    assert_eq!(r.totals.cache_read, 2100, "the parent's own figure stands");
+    assert_eq!(r.subagents.count, 2);
+    assert_eq!(r.subagents.call_count, 6, "3 calls x 2 children");
+    assert_eq!(r.subagents.totals.cache_read, 4200);
+    assert_eq!(r.subagents.residual, 1780, "890 x 2 children");
+    assert_eq!(r.subagents.by_model[0].model, "opus", "split per model");
+    assert_eq!(r.subagents.by_model[0].calls, 3);
+    assert_eq!(r.subagents.by_model[1].model, "sonnet");
+    assert_eq!(r.subagents.children.len(), 2);
+    assert_eq!(
+        rollup(&all[1], &all).subagents.count,
+        0,
+        "a subagent spawns none of its own here"
+    );
+}
+
+#[test]
+fn tldr_charges_a_subagent_to_its_parent() {
+    // The child comes first: a parent's row is filled in after the whole pass.
+    let all = vec![
+        child_of("s", "c1", "opus"),
+        three_call_session(),
+        child_of("s", "c2", "opus"),
+    ];
+
+    let t = tldr(&all);
+
+    assert_eq!(t.top_sessions.len(), 1, "a child gets no row of its own");
+    assert_eq!(t.top_sessions[0].session, "s");
+    assert_eq!(t.top_sessions[0].residual, 890, "the parent's own");
+    assert_eq!(t.top_sessions[0].sub_residual, 1780, "890 x 2 children");
+    assert_eq!(t.top_sessions[0].sub_calls, 6);
+}

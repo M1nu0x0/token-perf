@@ -7,19 +7,27 @@
   };
   type Tool = { name: string; calls: number; added: number; residual: number };
   type Call = { index: number; context: number; grew_by: number; residual: number; tools: string[] };
+  type Subagents = {
+    count: number; call_count: number; totals: Usage; residual: number;
+    by_model: { model: string; calls: number; totals: Usage }[];
+    children: { session: string; agent_type: string | null; call_count: number; totals: Usage; residual: number }[];
+  };
   type Report = {
     session: string; source: string; project: string; started_at: string;
     title: string; parent: string | null; agent_type: string | null;
     parent_tool_use_id: string | null; spawn_depth: number | null; failed_calls: number;
     call_count: number; totals: Usage; baseline: number; baseline_billed: number;
-    calls: Call[]; tools: Tool[];
+    calls: Call[]; tools: Tool[]; subagents: Subagents;
   };
 
   type Tldr = {
     sessions: number; calls: number; totals: Usage; cache_read_pct: number;
     amplification: (Bucket & { sessions: number; ratio: number })[];
     top_tools: { name: string; added: number; pct: number }[];
-    top_sessions: { session: string; title: string; call_count: number; residual: number }[];
+    top_sessions: {
+      session: string; title: string; call_count: number; residual: number;
+      sub_calls: number; sub_residual: number;
+    }[];
     solo_tool_pct: number;
   };
 
@@ -115,10 +123,10 @@
 
     <h3>{m.topHeading}</h3>
     <table>
-      <thead><tr><th>SESSION</th><th>CALLS</th><th>RESIDUAL</th></tr></thead>
+      <thead><tr><th>SESSION</th><th>CALLS</th><th>RESIDUAL</th><th>SUB</th></tr></thead>
       <tbody>
         {#each tldr.top_sessions as s (s.session)}
-          <tr onclick={() => open(s.session)}><td>{s.title}</td><td class="n">{s.call_count}</td><td class="n">{human(s.residual)}</td></tr>
+          <tr onclick={() => open(s.session)}><td>{s.title}</td><td class="n">{s.call_count}</td><td class="n">{human(s.residual)}</td><td class="n">{s.sub_calls ? human(s.sub_residual) : ''}</td></tr>
         {/each}
       </tbody>
     </table>
@@ -136,7 +144,7 @@
       <label><input type="checkbox" bind:checked={showAll} /> {m.includeSubagents}</label>
     </h2>
     <table>
-      <thead><tr><th>DATE</th><th>SESSION</th><th>CALLS</th><th>CACHE_RD</th><th>OUTPUT</th></tr></thead>
+      <thead><tr><th>DATE</th><th>SESSION</th><th>CALLS</th><th>CACHE_RD</th><th>SUB_RD</th><th>OUTPUT</th></tr></thead>
       <tbody>
         {#each visible.slice(0, 50) as s (s.session)}
           <tr class:active={selected?.session === s.session} onclick={() => open(s.session)}>
@@ -148,6 +156,7 @@
             </td>
             <td class="n">{s.call_count}</td>
             <td class="n">{human(s.totals.cache_read)}</td>
+            <td class="n">{s.subagents.count ? human(s.subagents.totals.cache_read) : ''}</td>
             <td class="n">{human(s.totals.output)}</td>
           </tr>
         {/each}
@@ -171,6 +180,22 @@
           human(selected.totals.cache_read),
         )}
       </p>
+      {#if selected.subagents.count > 0}
+        <p>
+          {@html m.subagents(
+            selected.subagents.count,
+            selected.subagents.call_count,
+            human(selected.subagents.totals.output),
+            human(selected.subagents.totals.cache_read),
+          )}
+        </p>
+        <p>
+          {@html m.withSubagents(
+            selected.call_count + selected.subagents.call_count,
+            human(selected.totals.cache_read + selected.subagents.totals.cache_read),
+          )}
+        </p>
+      {/if}
       <p>{m.baseline(human(selected.baseline), human(selected.baseline_billed))}</p>
       {#if selected.totals.cache_write_1h > 0}
         <p class="dim">

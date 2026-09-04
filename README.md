@@ -65,6 +65,11 @@ token-perf config --pretty on # bordered tables from now on; `config` alone show
 When working on the UI, leave `token-perf serve --port 5177` running and use `cd web && npm run dev` —
 the vite dev server proxies `/api` to 5177.
 
+A subagent is one tool call of its parent, so its tokens are part of the parent's bill. `sessions`
+puts them in a `SUB_RD` column and ranks by the two together, `summary` charges them to the parent's
+row, and `report` on a parent adds a `Subagents` section — the per-model split and the children that
+re-read the most.
+
 ### Language
 
 en · ko · ja are supported. The CLI output and the web UI use the same language.

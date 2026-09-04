@@ -36,3 +36,11 @@ fn a_date_is_ten_characters_of_yyyy_mm_dd() {
     assert!(!valid_date("2026-08-01T00:00:00Z"));
     assert!(!valid_date(""));
 }
+
+#[test]
+fn a_subagent_id_keeps_enough_to_tell_two_apart() {
+    use super::short;
+    assert_eq!(short("30ee1d12-cd17-4f02-809e-4785c774e22b"), "30ee1d12");
+    assert_eq!(short("agent-adc935a5f207eb2f6"), "agent-adc935a5");
+    assert_eq!(short("agent-a"), "agent-a", "shorter than the cut");
+}
