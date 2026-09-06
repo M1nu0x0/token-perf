@@ -8,21 +8,24 @@ use rust_i18n::t;
 use table::Align;
 use token_perf_core::{common::analyze, sync_and_load};
 
-// `--help` stays English: clap doc comments are compile-time literals.
 rust_i18n::i18n!("locales", fallback = "en");
+
+/// Help text is built while parsing, so the locale is set before `Cli::parse`
+/// and the strings are looked up at runtime instead of coming from doc comments.
+fn h(key: &str) -> String {
+    t!(key).to_string()
+}
 
 #[derive(Parser)]
 #[command(
     name = "token-perf",
     version,
-    about = "Find where your tokens leak, from local agent logs"
+    about = h("help.about")
 )]
 struct Cli {
-    /// Interface language (en, ko, ja). Saved for later runs.
-    #[arg(long, global = true)]
+    #[arg(long, global = true, help = h("help.lang"))]
     lang: Option<String>,
-    /// Re-read every transcript from the start instead of only what is new
-    #[arg(long, global = true)]
+    #[arg(long, global = true, help = h("help.rescan"))]
     rescan: bool,
     #[command(subcommand)]
     command: Command,
@@ -30,43 +33,38 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// List sessions, most re-billed cache first
+    #[command(about = h("help.sessions"))]
     Sessions {
-        #[arg(long, default_value_t = 20)]
+        #[arg(long, default_value_t = 20, help = h("help.sessions_top"))]
         top: usize,
-        /// Include subagent sessions (top-level only by default)
-        #[arg(long)]
+        #[arg(long, help = h("help.sessions_all"))]
         all: bool,
     },
-    /// Attribute one session's waste to the tools that caused it (defaults to the latest)
+    #[command(about = h("help.report"))]
     Report {
+        #[arg(help = h("help.report_session"))]
         session: Option<String>,
-        #[arg(long, default_value_t = 15)]
+        #[arg(long, default_value_t = 15, help = h("help.report_top"))]
         top: usize,
     },
-    /// Aggregate every session, most re-billed first
+    #[command(about = h("help.summary"))]
     Summary {
-        /// Earliest session date to include (YYYY-MM-DD)
-        #[arg(long)]
+        #[arg(long, help = h("help.since"))]
         since: Option<String>,
-        /// Latest session date to include (YYYY-MM-DD)
-        #[arg(long)]
+        #[arg(long, help = h("help.until"))]
         until: Option<String>,
     },
-    /// Start the web UI and open it in a browser
     #[cfg(feature = "serve")]
+    #[command(about = h("help.serve"))]
     Serve {
-        /// Port to bind. Omit and the OS picks a free one
-        #[arg(long)]
+        #[arg(long, help = h("help.port"))]
         port: Option<u16>,
-        /// Do not open a browser
-        #[arg(long)]
+        #[arg(long, help = h("help.no_open"))]
         no_open: bool,
     },
-    /// Show persisted settings, or change one
+    #[command(about = h("help.config"))]
     Config {
-        /// Draw tables with Unicode borders instead of plain aligned columns (on/off)
-        #[arg(long, value_parser = clap::builder::BoolishValueParser::new())]
+        #[arg(long, value_parser = clap::builder::BoolishValueParser::new(), help = h("help.pretty"))]
         pretty: Option<bool>,
     },
 }
@@ -94,13 +92,19 @@ fn in_range(started_at: &str, since: Option<&str>, until: Option<&str>) -> bool 
 }
 
 fn main() {
-    let cli = Cli::parse();
-    let (flag, unknown) = lang::split_lang_flag(cli.lang.as_deref());
+    // Before parsing, so --help comes out in the user's language.
+    let argv_lang = lang::argv_lang(std::env::args());
+    let saved = token_perf_core::store::Store::open_default()
+        .ok()
+        .and_then(|s| s.setting("lang").ok().flatten());
     rust_i18n::set_locale(lang::resolve_lang(
-        flag,
-        None,
+        argv_lang.as_deref(),
+        saved.as_deref(),
         lang::process_lang().as_deref(),
     ));
+
+    let cli = Cli::parse();
+    let (flag, unknown) = lang::split_lang_flag(cli.lang.as_deref());
 
     let (store, sessions, scanned) = match sync_and_load(cli.rescan) {
         Ok(loaded) => loaded,

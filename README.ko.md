@@ -70,10 +70,10 @@ vite 개발 서버가 `/api` 를 5177 로 프록시한다.
 
 ### 언어
 
-en · ko · ja 를 지원한다. CLI 출력과 웹 UI 가 같은 언어를 쓴다.
+en · ko 를 지원한다. CLI 출력과 웹 UI 가 같은 언어를 쓴다.
 
 ```sh
-token-perf --lang ja sessions   # 이번 실행부터 일본어, 설정에 저장돼 다음 실행에도 유지된다
+token-perf --lang ko sessions   # 이번 실행부터 한국어, 설정에 저장돼 다음 실행에도 유지된다
 ```
 
 결정 순서는 `--lang` → 저장된 설정 → `LC_ALL`/`LANG` → `en`. 지원하지 않는 코드를 주면

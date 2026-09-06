@@ -72,10 +72,10 @@ re-read the most.
 
 ### Language
 
-en · ko · ja are supported. The CLI output and the web UI use the same language.
+en · ko are supported. The CLI output and the web UI use the same language.
 
 ```sh
-token-perf --lang ja sessions   # Japanese from this run on, saved to config so it persists
+token-perf --lang ko sessions   # Korean from this run on, saved to config so it persists
 ```
 
 The decision order is `--lang` → saved config → `LC_ALL`/`LANG` → `en`. If the code is not supported,

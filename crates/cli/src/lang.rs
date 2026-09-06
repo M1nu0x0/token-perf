@@ -1,6 +1,6 @@
 use token_perf_core::store::Store;
 
-const LANGS: [&str; 3] = ["en", "ko", "ja"];
+const LANGS: [&str; 2] = ["en", "ko"];
 
 pub fn supported(code: &str) -> Option<&'static str> {
     let short = code.split(['_', '.', '-']).next().unwrap_or_default();
@@ -9,6 +9,20 @@ pub fn supported(code: &str) -> Option<&'static str> {
 
 pub fn resolve_lang(flag: Option<&str>, saved: Option<&str>, env: Option<&str>) -> &'static str {
     flag.or(saved).or(env).and_then(supported).unwrap_or("en")
+}
+
+/// `--lang ko` or `--lang=ko`, read off argv before clap runs.
+pub fn argv_lang(args: impl IntoIterator<Item = String>) -> Option<String> {
+    let mut args = args.into_iter();
+    while let Some(a) = args.next() {
+        if a == "--lang" {
+            return args.next();
+        }
+        if let Some(v) = a.strip_prefix("--lang=") {
+            return Some(v.to_string());
+        }
+    }
+    None
 }
 
 /// POSIX: LC_ALL overrides LANG.
