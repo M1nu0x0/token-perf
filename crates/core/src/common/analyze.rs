@@ -110,12 +110,12 @@ pub fn session(s: &Session) -> Report {
     // up to that point, not to the end of the session. A drop in context
     // without a marker is a spike settling or a broken record, not a compaction;
     // in 23k logged calls no unmarked drop ever looked like one.
-    let mut grew = vec![0u64; n];
-    for i in 1..n {
-        let (prev, call) = (&s.calls[i - 1], &s.calls[i]);
-        let before = prev.usage.context() + prev.usage.output;
-        grew[i] = call.usage.context().saturating_sub(before);
-    }
+    let grew: Vec<u64> = std::iter::once(0)
+        .chain(s.calls.windows(2).map(|w| {
+            let before = w[0].usage.context() + w[0].usage.output;
+            w[1].usage.context().saturating_sub(before)
+        }))
+        .collect();
     // First compaction after each call (n if none).
     let mut next_shrink = vec![n; n];
     let mut next = n;
