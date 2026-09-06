@@ -27,6 +27,8 @@ struct Cli {
     lang: Option<String>,
     #[arg(long, global = true, help = h("help.rescan"))]
     rescan: bool,
+    #[arg(long, global = true, help = h("help.json"))]
+    json: bool,
     #[command(subcommand)]
     command: Command,
 }
@@ -106,6 +108,7 @@ fn main() {
     let cli = Cli::parse();
     let (flag, unknown) = lang::split_lang_flag(cli.lang.as_deref());
 
+    let json = cli.json;
     let (store, sessions, scanned) = match sync_and_load(cli.rescan) {
         Ok(loaded) => loaded,
         Err(e) => {
@@ -155,6 +158,9 @@ fn main() {
                 .map(|s| analyze::rollup(s, &sessions))
                 .collect();
             reports.sort_by_key(|r| Reverse(r.totals.cache_read + r.subagents.totals.cache_read));
+            if json {
+                return emit_json(&reports[..reports.len().min(top)]);
+            }
 
             let rows: Vec<Vec<String>> = reports
                 .iter()
@@ -229,6 +235,9 @@ fn main() {
             };
 
             let r = analyze::rollup(target, &sessions);
+            if json {
+                return emit_json(&r);
+            }
             println!("session  {}  ({})", r.session, r.source);
             if !r.title.is_empty() {
                 println!("title    {}", r.title);
@@ -434,6 +443,9 @@ fn main() {
             }
 
             let d = analyze::tldr(&sessions);
+            if json {
+                return emit_json(&d);
+            }
             println!(
                 "{}",
                 t!("summary_lead", sessions = d.sessions, calls = d.calls)
@@ -578,6 +590,10 @@ fn open_browser(url: &str) {
 
 /// A subagent id is `agent-` plus hex, so cutting at 8 leaves every one of them
 /// reading `agent-a`. The prefix stays: the id has to paste back into `report`.
+fn emit_json(value: &(impl serde::Serialize + ?Sized)) {
+    println!("{}", serde_json::to_string_pretty(value).expect("serializable"));
+}
+
 fn short(id: &str) -> &str {
     let cut = if id.starts_with("agent-") { 14 } else { 8 };
     id.get(..cut).unwrap_or(id)

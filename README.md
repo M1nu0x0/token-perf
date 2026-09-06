@@ -60,6 +60,7 @@ token-perf report [SESSION]  # residual cost per tool (latest session if omitted
 token-perf serve             # web UI (OS picks a free port; the address is printed on start)
 token-perf serve --port 5177 # fixed port (--no-open skips launching a browser)
 token-perf config --pretty on # bordered tables from now on; `config` alone shows current settings
+token-perf report --json      # any of sessions/report/summary as JSON, for scripts
 ```
 
 When working on the UI, leave `token-perf serve --port 5177` running and use `cd web && npm run dev` —

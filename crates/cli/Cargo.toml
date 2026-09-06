@@ -18,6 +18,8 @@ clap = { version = "4", features = ["derive"] }
 tokio = { version = "1", features = ["rt-multi-thread"], optional = true }
 rust-i18n = "4.2.1"
 comfy-table = "8"
+serde = "1"
+serde_json = "1"
 
 [features]
 default = ["serve"]

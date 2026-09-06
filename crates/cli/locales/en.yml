@@ -48,3 +48,4 @@ help:
   no_open: "Do not open a browser"
   config: "Show persisted settings, or change one"
   pretty: "Draw tables with Unicode borders instead of plain aligned columns (on/off)"
+  json: "Print the result as JSON instead of tables"

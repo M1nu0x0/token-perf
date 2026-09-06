@@ -59,6 +59,7 @@ token-perf report [세션ID]   # 툴별 잔류 비용 (생략 시 최근 세션)
 token-perf serve             # 웹 UI (OS 가 고른 빈 포트, 주소는 실행하면 출력된다)
 token-perf serve --port 5177 # 포트 고정 (--no-open 이면 브라우저를 안 띄운다)
 token-perf config --pretty on # 이후로 표에 테두리를 그린다. `config` 만 치면 현재 설정을 보여준다
+token-perf report --json      # sessions/report/summary 를 JSON 으로. 스크립트에서 쓸 때
 ```
 
 UI 를 고칠 때는 `token-perf serve --port 5177` 를 띄워 둔 채 `cd web && npm run dev` —

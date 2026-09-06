@@ -1310,6 +1310,8 @@ dependencies = [
  "clap",
  "comfy-table",
  "rust-i18n",
+ "serde",
+ "serde_json",
  "token-perf-core",
  "tokio",
 ]
