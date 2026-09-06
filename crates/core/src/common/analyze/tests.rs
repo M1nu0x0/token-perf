@@ -136,7 +136,7 @@ fn context_shrink_does_not_underflow() {
 
 #[test]
 fn residual_stops_at_the_next_compaction() {
-    let s = Session {
+    let mut s = Session {
         id: "s".into(),
         source: "test".into(),
         project: "/p".into(),
@@ -158,6 +158,7 @@ fn residual_stops_at_the_next_compaction() {
         orphan_results: Vec::new(),
         orphan_errors: Vec::new(),
     };
+    s.calls[3].compacted = true;
 
     let report = session(&s);
 
@@ -222,32 +223,14 @@ fn a_marked_call_is_a_compaction_however_shallow_the_drop() {
 }
 
 #[test]
-fn a_deep_drop_with_heavy_cache_writes_is_a_compaction() {
+fn an_unmarked_drop_is_not_a_compaction_however_deep() {
     let report = session(&drop_session(500, 700));
-
-    assert_eq!(report.calls[1].grew_by, 1000);
-    assert_eq!(report.calls[1].residual, 0, "the fallback caught it");
-}
-
-#[test]
-fn a_shallow_drop_is_not_a_compaction_however_heavy_the_cache_writes() {
-    let report = session(&drop_session(100, 1500));
 
     assert_eq!(
         report.calls[1].residual, 2000,
         "re-billed to the session end"
     );
     assert_eq!(report.calls[2].grew_by, 0, "a drop is not growth");
-}
-
-#[test]
-fn a_deep_drop_without_cache_writes_is_not_a_compaction() {
-    let report = session(&drop_session(1150, 50));
-
-    assert_eq!(
-        report.calls[1].residual, 2000,
-        "re-billed to the session end"
-    );
 }
 
 fn child_of(parent: &str, id: &str, model: &str) -> Session {

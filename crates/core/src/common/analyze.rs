@@ -94,28 +94,22 @@ pub fn session(s: &Session) -> Report {
     let mut totals = Usage::default();
     let mut calls = Vec::with_capacity(n);
 
-    // A shrinking context is a compaction: tokens before it are re-billed only up
-    // to that point, not to the end of the session.
+    // A compaction is the source's marker only. Tokens before it are re-billed
+    // up to that point, not to the end of the session. A drop in context
+    // without a marker is a spike settling or a broken record, not a compaction;
+    // in 23k logged calls no unmarked drop ever looked like one.
     let mut grew = vec![0u64; n];
-    let mut shrank = vec![false; n];
     for i in 1..n {
         let (prev, call) = (&s.calls[i - 1], &s.calls[i]);
         let before = prev.usage.context() + prev.usage.output;
-        let after = call.usage.context();
-        grew[i] = after.saturating_sub(before);
-        // A small dip is a spike settling back or a broken record; calling that a
-        // compaction would truncate every residual.
-        // ponytail: without a marker the constants are arbitrary; a compaction the
-        // fallback misses inflates every residual before it.
-        let cw_ratio = call.usage.cache_write() as f64 / after.max(1) as f64;
-        shrank[i] = call.compacted || (after < prev.usage.context() * 3 / 4 && cw_ratio >= 0.4);
+        grew[i] = call.usage.context().saturating_sub(before);
     }
-    // First shrink after each call (n if none).
+    // First compaction after each call (n if none).
     let mut next_shrink = vec![n; n];
     let mut next = n;
     for i in (0..n).rev() {
         next_shrink[i] = next;
-        if shrank[i] {
+        if s.calls[i].compacted {
             next = i;
         }
     }
