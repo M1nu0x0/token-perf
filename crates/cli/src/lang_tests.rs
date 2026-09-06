@@ -43,7 +43,10 @@ fn a_locale_carries_a_region_and_an_encoding() {
 #[test]
 fn the_flag_is_read_off_argv_in_both_spellings() {
     let a = |v: &[&str]| argv_lang(v.iter().map(|s| s.to_string()));
-    assert_eq!(a(&["tp", "--lang", "ko", "sessions"]).as_deref(), Some("ko"));
+    assert_eq!(
+        a(&["tp", "--lang", "ko", "sessions"]).as_deref(),
+        Some("ko")
+    );
     assert_eq!(a(&["tp", "sessions", "--lang=ko"]).as_deref(), Some("ko"));
     assert_eq!(a(&["tp", "sessions"]), None);
     assert_eq!(a(&["tp", "--lang"]), None);

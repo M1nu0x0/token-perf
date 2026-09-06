@@ -289,3 +289,25 @@ fn tldr_charges_a_subagent_to_its_parent() {
     assert_eq!(t.top_sessions[0].sub_residual, 1780, "890 x 2 children");
     assert_eq!(t.top_sessions[0].sub_calls, 6);
 }
+
+#[test]
+fn a_session_is_priced_only_when_every_model_is_known() {
+    let mut s = three_call_session();
+    for c in &mut s.calls {
+        c.model = "claude-opus-5".into();
+    }
+    let known = session(&s).cost.expect("priced");
+    assert!(known > 0.0);
+    assert_eq!(
+        session(&s).calls[1].residual_cost,
+        Some(session(&s).calls[1].residual as f64 * 0.5 / 1e6)
+    );
+
+    s.calls[1].model = "unknown-model".into();
+    assert_eq!(
+        session(&s).cost,
+        None,
+        "a partial sum would read as the whole"
+    );
+    assert_eq!(session(&s).tools[0].residual_cost, None);
+}

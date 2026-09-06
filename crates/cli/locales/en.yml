@@ -30,6 +30,8 @@ summary_tools: "What made it big (share of everything tools pushed into the conv
 summary_top_sessions: "The most expensive conversations"
 summary_solo: "%{pct}% of the messages that used a tool called exactly one. Calling several at once cuts the round trips, and fewer round trips means less re-reading."
 
+cost_line: "Cost     %{cost}  (Anthropic list price; subagents not included)"
+summary_cost: "At list price that is %{cost}."
 help:
   about: "Find where your tokens leak, from local agent logs"
   lang: "Interface language (en, ko). Saved for later runs"
@@ -49,3 +51,4 @@ help:
   config: "Show persisted settings, or change one"
   pretty: "Draw tables with Unicode borders instead of plain aligned columns (on/off)"
   json: "Print the result as JSON instead of tables"
+  cost: "Add a dollar column, priced at Anthropic list rates per model"

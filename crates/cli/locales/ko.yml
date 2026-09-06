@@ -30,6 +30,8 @@ summary_tools: "덩치를 키운 범인 (툴이 대화에 밀어 넣은 양 중 
 summary_top_sessions: "제일 비쌌던 대화"
 summary_solo: "툴을 쓴 메시지의 %{pct}%가 툴을 딱 하나만 불렀어요. 한 번에 여러 개를 같이 부르면 그만큼 왕복이 줄고, 왕복이 줄면 다시 읽는 양도 줄어요."
 
+cost_line: "비용     %{cost}  (Anthropic 정가 기준, 서브에이전트 제외)"
+summary_cost: "정가로 환산하면 %{cost}입니다."
 help:
   about: "로컬 에이전트 로그에서 토큰이 새는 곳을 찾습니다"
   lang: "인터페이스 언어 (en, ko). 이후 실행에도 저장됩니다"
@@ -49,3 +51,4 @@ help:
   config: "저장된 설정을 보거나 바꿉니다"
   pretty: "정렬된 열 대신 유니코드 테두리로 표를 그립니다 (on/off)"
   json: "표 대신 JSON으로 출력합니다"
+  cost: "모델별 Anthropic 정가로 환산한 달러 열을 추가합니다"

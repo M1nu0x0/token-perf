@@ -7,6 +7,7 @@ use std::cmp::Reverse;
 use serde::Serialize;
 
 use super::model::{Session, Usage};
+use super::pricing;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct CallCost {
@@ -20,6 +21,12 @@ pub struct CallCost {
     pub residual: u64,
     /// Requested by the previous call.
     pub tools: Vec<String>,
+    /// Dollars; `None` for a model without a known price.
+    pub cost: Option<f64>,
+    /// `residual` priced at this call's cache-read rate.
+    // ponytail: the re-reads happen on later calls, which may run another model;
+    // sessions rarely switch, so the entering call's rate stands in.
+    pub residual_cost: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -28,6 +35,7 @@ pub struct ToolCost {
     pub calls: usize,
     pub added: u64,
     pub residual: u64,
+    pub residual_cost: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -45,6 +53,8 @@ pub struct Report {
     pub started_at: String,
     pub call_count: usize,
     pub totals: Usage,
+    /// Dollars for every call; `None` if any call's model has no known price.
+    pub cost: Option<f64>,
     /// First call's context: system prompt, tool definitions, rule files.
     pub baseline: u64,
     pub baseline_billed: u64,
@@ -74,6 +84,7 @@ pub struct SubagentChild {
     pub call_count: usize,
     pub totals: Usage,
     pub residual: u64,
+    pub cost: Option<f64>,
 }
 
 /// One parent's subagents, summed.
@@ -83,6 +94,7 @@ pub struct Subagents {
     pub call_count: usize,
     pub totals: Usage,
     pub residual: u64,
+    pub cost: Option<f64>,
     /// A spawned agent often runs on a different model than its parent.
     pub by_model: Vec<ModelUsage>,
     /// Worst cache re-read first.
@@ -117,6 +129,8 @@ pub fn session(s: &Session) -> Report {
     for (i, call) in s.calls.iter().enumerate() {
         totals += call.usage;
         let grew_by = grew[i];
+        let residual = grew_by * (next_shrink[i] - 1 - i) as u64;
+        let price = pricing::price(&call.model);
 
         calls.push(CallCost {
             index: i,
@@ -126,7 +140,7 @@ pub fn session(s: &Session) -> Report {
             output: call.usage.output,
             grew_by,
             // Every call up to the next compaction carries these tokens again.
-            residual: grew_by * (next_shrink[i] - 1 - i) as u64,
+            residual,
             tools: if i == 0 {
                 Vec::new()
             } else {
@@ -136,6 +150,8 @@ pub fn session(s: &Session) -> Report {
                     .map(|t| t.name.clone())
                     .collect()
             },
+            cost: price.map(|p| p.cost(&call.usage)),
+            residual_cost: price.map(|p| p.reread(residual)),
         });
     }
 
@@ -158,6 +174,7 @@ pub fn session(s: &Session) -> Report {
         started_at: s.started_at.clone(),
         call_count: n,
         totals,
+        cost: pricing::sum(calls.iter().map(|c| c.cost)),
         baseline,
         baseline_billed: baseline * n as u64,
         tools: attribute_tools(s, &calls),
@@ -211,9 +228,11 @@ fn subagents(parent: &str, all: &[Session]) -> Subagents {
             call_count: r.call_count,
             totals: r.totals,
             residual,
+            cost: r.cost,
         });
     }
 
+    out.cost = pricing::sum(out.children.iter().map(|c| c.cost));
     out.by_model = by_model.into_values().collect();
     out.by_model
         .sort_by_key(|m| (Reverse(m.totals.cache_read), m.model.clone()));
@@ -246,10 +265,13 @@ fn attribute_tools(s: &Session, calls: &[CallCost]) -> Vec<ToolCost> {
                 calls: 0,
                 added: 0,
                 residual: 0,
+                residual_cost: Some(0.0),
             });
             entry.calls += 1;
             entry.added += (cost.grew_by as f64 * share) as u64;
             entry.residual += (cost.residual as f64 * share) as u64;
+            entry.residual_cost =
+                pricing::sum([entry.residual_cost, cost.residual_cost.map(|c| c * share)]);
         }
     }
 
@@ -263,6 +285,7 @@ pub struct Tldr {
     pub sessions: usize,
     pub calls: usize,
     pub totals: Usage,
+    pub cost: Option<f64>,
     pub cache_read_pct: f64,
     pub amplification: Vec<Bucket>,
     pub top_tools: Vec<TldrTool>,
@@ -304,6 +327,7 @@ const BUCKETS: [(usize, Option<usize>); 3] = [(0, Some(5)), (6, Some(40)), (41, 
 pub fn tldr(sessions: &[Session]) -> Tldr {
     let mut out = Tldr {
         sessions: sessions.len(),
+        cost: Some(0.0),
         ..Default::default()
     };
     let mut buckets = [(0usize, 0u64, 0u64); BUCKETS.len()];
@@ -316,6 +340,7 @@ pub fn tldr(sessions: &[Session]) -> Tldr {
         let r = session(s);
         out.calls += r.call_count;
         out.totals += r.totals;
+        out.cost = pricing::sum([out.cost, r.cost]);
 
         let residual = r.residual();
         let grew: u64 = r.calls.iter().map(|c| c.grew_by).sum();

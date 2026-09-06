@@ -61,6 +61,7 @@ token-perf serve             # web UI (OS picks a free port; the address is prin
 token-perf serve --port 5177 # fixed port (--no-open skips launching a browser)
 token-perf config --pretty on # bordered tables from now on; `config` alone shows current settings
 token-perf report --json      # any of sessions/report/summary as JSON, for scripts
+token-perf sessions --cost    # add a dollar column at Anthropic list price (also report, summary)
 ```
 
 When working on the UI, leave `token-perf serve --port 5177` running and use `cd web && npm run dev` —

@@ -6,7 +6,10 @@ use std::cmp::Reverse;
 use clap::{Parser, Subcommand};
 use rust_i18n::t;
 use table::Align;
-use token_perf_core::{common::analyze, sync_and_load};
+use token_perf_core::{
+    common::{analyze, pricing},
+    sync_and_load,
+};
 
 rust_i18n::i18n!("locales", fallback = "en");
 
@@ -29,6 +32,8 @@ struct Cli {
     rescan: bool,
     #[arg(long, global = true, help = h("help.json"))]
     json: bool,
+    #[arg(long, global = true, help = h("help.cost"))]
+    cost: bool,
     #[command(subcommand)]
     command: Command,
 }
@@ -109,6 +114,7 @@ fn main() {
     let (flag, unknown) = lang::split_lang_flag(cli.lang.as_deref());
 
     let json = cli.json;
+    let show_cost = cli.cost;
     let (store, sessions, scanned) = match sync_and_load(cli.rescan) {
         Ok(loaded) => loaded,
         Err(e) => {
@@ -166,7 +172,7 @@ fn main() {
                 .iter()
                 .take(top)
                 .map(|r| {
-                    vec![
+                    let mut row = vec![
                         short(&r.session).to_string(),
                         r.started_at.get(..10).unwrap_or("").to_string(),
                         r.call_count.to_string(),
@@ -179,27 +185,31 @@ fn main() {
                         human(r.totals.output),
                         basename(&r.project).to_string(),
                         format!("{}{}", if r.parent.is_some() { "↳ " } else { "" }, r.title),
-                    ]
+                    ];
+                    if show_cost {
+                        let cost = pricing::sum([r.cost, r.subagents.cost]);
+                        row.insert(6, dollars(cost));
+                    }
+                    row
                 })
                 .collect();
-            table::print_table(
-                pretty,
-                "",
-                &[
-                    "ID", "DATE", "CALLS", "CACHE_RD", "SUB_RD", "OUTPUT", "PROJECT", "TITLE",
-                ],
-                &[
-                    Align::Left,
-                    Align::Left,
-                    Align::Right,
-                    Align::Right,
-                    Align::Right,
-                    Align::Right,
-                    Align::Left,
-                ],
-                &rows,
-                true,
-            );
+            let mut headers = vec![
+                "ID", "DATE", "CALLS", "CACHE_RD", "SUB_RD", "OUTPUT", "PROJECT", "TITLE",
+            ];
+            let mut aligns = vec![
+                Align::Left,
+                Align::Left,
+                Align::Right,
+                Align::Right,
+                Align::Right,
+                Align::Right,
+                Align::Left,
+            ];
+            if show_cost {
+                headers.insert(6, "COST");
+                aligns.insert(6, Align::Right);
+            }
+            table::print_table(pretty, "", &headers, &aligns, &rows, true);
         }
 
         Command::Report { session, top } => {
@@ -266,6 +276,9 @@ fn main() {
                     cache_write = human(r.totals.cache_write())
                 )
             );
+            if show_cost {
+                println!("{}", t!("cost_line", cost = dollars(r.cost)));
+            }
             println!(
                 "{}",
                 t!(
@@ -384,22 +397,25 @@ fn main() {
                 .iter()
                 .take(top)
                 .map(|t| {
-                    vec![
+                    let mut row = vec![
                         t.name.clone(),
                         t.calls.to_string(),
                         human(t.added),
                         human(t.residual),
-                    ]
+                    ];
+                    if show_cost {
+                        row.push(dollars(t.residual_cost));
+                    }
+                    row
                 })
                 .collect();
-            table::print_table(
-                pretty,
-                "  ",
-                &["TOOL", "CALLS", "ADDED", "RESIDUAL"],
-                &[Align::Left, Align::Right, Align::Right, Align::Right],
-                &tool_rows,
-                false,
-            );
+            let mut headers = vec!["TOOL", "CALLS", "ADDED", "RESIDUAL"];
+            let mut aligns = vec![Align::Left, Align::Right, Align::Right, Align::Right];
+            if show_cost {
+                headers.push("COST");
+                aligns.push(Align::Right);
+            }
+            table::print_table(pretty, "  ", &headers, &aligns, &tool_rows, false);
             println!();
 
             println!("{}", t!("worst_calls"));
@@ -450,6 +466,9 @@ fn main() {
                 "{}",
                 t!("summary_lead", sessions = d.sessions, calls = d.calls)
             );
+            if show_cost {
+                println!("{}", t!("summary_cost", cost = dollars(d.cost)));
+            }
             println!(
                 "{}",
                 t!(
@@ -590,8 +609,20 @@ fn open_browser(url: &str) {
 
 /// A subagent id is `agent-` plus hex, so cutting at 8 leaves every one of them
 /// reading `agent-a`. The prefix stays: the id has to paste back into `report`.
+/// Unknown model somewhere in the sum → "-", never a number that looks complete.
+fn dollars(cost: Option<f64>) -> String {
+    match cost {
+        Some(c) if c < 0.01 && c > 0.0 => "<$0.01".to_string(),
+        Some(c) => format!("${c:.2}"),
+        None => "-".to_string(),
+    }
+}
+
 fn emit_json(value: &(impl serde::Serialize + ?Sized)) {
-    println!("{}", serde_json::to_string_pretty(value).expect("serializable"));
+    println!(
+        "{}",
+        serde_json::to_string_pretty(value).expect("serializable")
+    );
 }
 
 fn short(id: &str) -> &str {
