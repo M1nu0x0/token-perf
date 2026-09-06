@@ -1,4 +1,5 @@
 pub mod common;
+#[cfg(feature = "serve")]
 pub mod server;
 pub mod sources;
 pub mod store;

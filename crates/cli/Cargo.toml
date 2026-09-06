@@ -15,6 +15,10 @@ path = "src/main.rs"
 [dependencies]
 token-perf-core.workspace = true
 clap = { version = "4", features = ["derive"] }
-tokio = { version = "1", features = ["rt-multi-thread"] }
+tokio = { version = "1", features = ["rt-multi-thread"], optional = true }
 rust-i18n = "4.2.1"
 comfy-table = "8"
+
+[features]
+default = ["serve"]
+serve = ["token-perf-core/serve", "dep:tokio"]

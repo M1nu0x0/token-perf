@@ -54,6 +54,7 @@ enum Command {
         until: Option<String>,
     },
     /// Start the web UI and open it in a browser
+    #[cfg(feature = "serve")]
     Serve {
         /// Port to bind. Omit and the OS picks a free one
         #[arg(long)]
@@ -127,8 +128,11 @@ fn main() {
         eprintln!("{}", t!("skipped", count = scanned.files_skipped));
     }
     // serve and config must start with no sessions: CI has no ~/.claude at all.
-    if sessions.is_empty() && !matches!(cli.command, Command::Serve { .. } | Command::Config { .. })
-    {
+    #[cfg(feature = "serve")]
+    let needs_sessions = !matches!(cli.command, Command::Serve { .. } | Command::Config { .. });
+    #[cfg(not(feature = "serve"))]
+    let needs_sessions = !matches!(cli.command, Command::Config { .. });
+    if sessions.is_empty() && needs_sessions {
         eprintln!("{}", t!("no_sessions"));
         std::process::exit(1);
     }
@@ -513,6 +517,7 @@ fn main() {
             );
         }
 
+        #[cfg(feature = "serve")]
         Command::Serve { port, no_open } => serve(sessions, lang, port.unwrap_or(0), !no_open),
 
         Command::Config { .. } => {
@@ -522,6 +527,7 @@ fn main() {
     }
 }
 
+#[cfg(feature = "serve")]
 fn serve(sessions: Vec<token_perf_core::Session>, lang: String, port: u16, open: bool) {
     let count = sessions.len();
     let runtime = tokio::runtime::Runtime::new().expect("tokio runtime");
@@ -547,6 +553,7 @@ fn serve(sessions: Vec<token_perf_core::Session>, lang: String, port: u16, open:
     }
 }
 
+#[cfg(feature = "serve")]
 fn open_browser(url: &str) {
     let mut command = if cfg!(target_os = "macos") {
         let mut c = std::process::Command::new("open");

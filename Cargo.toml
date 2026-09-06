@@ -11,4 +11,4 @@ repository = "https://github.com/M1nu0x0/token-perf"
 readme = "README.md"
 
 [workspace.dependencies]
-token-perf-core = { path = "crates/core", version = "0.1.0" }
+token-perf-core = { path = "crates/core", version = "0.1.0", default-features = false }
