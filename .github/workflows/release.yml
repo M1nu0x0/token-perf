@@ -79,5 +79,5 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           # The matrix jobs race for this; the losers find it already there.
-          gh release create "${{ github.ref_name }}" --title "${{ github.ref_name }}" --notes "" || true
+          gh release create "${{ github.ref_name }}" --title "${{ github.ref_name }}" --generate-notes || true
           gh release upload "${{ github.ref_name }}" "$asset" "$asset.sha256" --clobber
