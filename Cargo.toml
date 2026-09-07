@@ -3,7 +3,7 @@ resolver = "3"
 members = ["crates/core", "crates/cli"]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 rust-version = "1.87"
 license = "MIT"
@@ -11,4 +11,9 @@ repository = "https://github.com/M1nu0x0/token-perf"
 readme = "README.md"
 
 [workspace.dependencies]
-token-perf-core = { path = "crates/core", version = "0.1.0", default-features = false }
+token-perf-core = { path = "crates/core", version = "0.2.0", default-features = false }
+
+# The profile that 'dist' will build with
+[profile.dist]
+inherits = "release"
+lto = "thin"

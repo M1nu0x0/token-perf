@@ -1,0 +1,14 @@
+- name: Set up Node.js
+  uses: actions/setup-node@v5
+  with:
+    node-version: 24
+    cache: npm
+    cache-dependency-path: web/package-lock.json
+
+# The UI must be built first: crates/core/build.rs fails the release build without it.
+# `cd web` rather than working-directory: dist drops unknown step keys.
+- name: Build web UI
+  run: |
+    cd web
+    npm ci
+    npm run build
