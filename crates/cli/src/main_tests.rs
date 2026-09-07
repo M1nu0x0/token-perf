@@ -47,7 +47,7 @@ fn a_subagent_id_keeps_enough_to_tell_two_apart() {
 
 #[test]
 fn a_leading_minus_flips_the_sort_and_a_typo_is_an_error() {
-    use super::{SortField, Sort, parse_sort};
+    use super::{Sort, SortField, parse_sort};
     assert_eq!(
         parse_sort("calls"),
         Ok(Sort {

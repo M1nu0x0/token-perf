@@ -141,7 +141,10 @@ fn sort_reports(reports: &mut [analyze::Report], sort: &Sort) {
 
 /// Title, project and id searched as one string, exactly like the web search box.
 fn matches_grep(fields: [&str; 3], query: &str) -> bool {
-    fields.join(" ").to_lowercase().contains(&query.to_lowercase())
+    fields
+        .join(" ")
+        .to_lowercase()
+        .contains(&query.to_lowercase())
 }
 
 /// The 10% of calls that grew the context most: the cut is the 10th-from-the-top
