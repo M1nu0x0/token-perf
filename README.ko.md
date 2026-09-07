@@ -37,19 +37,41 @@ residual(n) = grew(n) × (다음 컴팩션 전까지 남은 호출 수)  # 컨�
 
 ## 설치
 
-최신 릴리스의 프리빌트 바이너리:
-
 ```sh
-# macOS (애플 실리콘)
-curl -fsSL https://github.com/M1nu0x0/token-perf/releases/latest/download/token-perf-aarch64-apple-darwin.tar.gz | tar -xz
-# macOS (인텔)
-curl -fsSL https://github.com/M1nu0x0/token-perf/releases/latest/download/token-perf-x86_64-apple-darwin.tar.gz | tar -xz
-# Linux (x86_64)
-curl -fsSL https://github.com/M1nu0x0/token-perf/releases/latest/download/token-perf-x86_64-unknown-linux-gnu.tar.gz | tar -xz
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/M1nu0x0/token-perf/releases/latest/download/token-perf-installer.sh | sh
 ```
 
-현재 디렉터리에 `token-perf` 바이너리가 나온다. `PATH` 에 있는 곳으로 옮기면 된다.
-각 아카이브 옆에 `.sha256` 이 함께 올라간다.
+윈도우는 PowerShell 에서:
+
+```powershell
+irm https://github.com/M1nu0x0/token-perf/releases/latest/download/token-perf-installer.ps1 | iex
+```
+
+두 스크립트 모두 별도의 툴체인이 필요 없다. 설치 위치는 `$CARGO_HOME/bin`(기본 `~/.cargo/bin`)이고
+셸 rc 에 그 디렉터리를 `PATH` 로 추가하므로, 새 셸을 열거나 rc 를 source 해야 `token-perf` 가 잡힌다.
+
+직접 내려받으려면 [최신 릴리스](https://github.com/M1nu0x0/token-perf/releases/latest)에서
+`token-perf-aarch64-apple-darwin.tar.xz`, `-x86_64-apple-darwin.tar.xz`,
+`-x86_64-unknown-linux-gnu.tar.xz`, `-aarch64-unknown-linux-gnu.tar.xz`,
+`token-perf-x86_64-pc-windows-msvc.zip` 중 플랫폼에 맞는 것을 고른다. 풀면 `token-perf` 바이너리가
+든 디렉터리가 나오고, 각 아카이브 옆에는 `.sha256` 이 함께 올라간다:
+
+```sh
+shasum -a 256 -c token-perf-aarch64-apple-darwin.tar.xz.sha256
+```
+
+Homebrew: 준비 중.
+
+두 스크립트로 설치했다면 스스로 업데이트할 수 있다:
+
+```sh
+token-perf upgrade          # --check 는 새 버전이 있는지 확인만 한다
+```
+
+그 밖의 설치본(직접 푼 아카이브, 패키지 매니저, `cargo install`)은 install receipt 가 없어서
+`upgrade` 가 그 사실을 알리고 아무것도 바꾸지 않는다.
+
+소스에서 빌드하는 방법은 [빌드](#빌드)에 있다.
 
 ## 쓰는 법
 

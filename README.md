@@ -38,19 +38,43 @@ later can be pulled out with `json_extract` without a re-scan.
 
 ## Install
 
-Prebuilt binaries for the latest release:
-
 ```sh
-# macOS (Apple silicon)
-curl -fsSL https://github.com/M1nu0x0/token-perf/releases/latest/download/token-perf-aarch64-apple-darwin.tar.gz | tar -xz
-# macOS (Intel)
-curl -fsSL https://github.com/M1nu0x0/token-perf/releases/latest/download/token-perf-x86_64-apple-darwin.tar.gz | tar -xz
-# Linux (x86_64)
-curl -fsSL https://github.com/M1nu0x0/token-perf/releases/latest/download/token-perf-x86_64-unknown-linux-gnu.tar.gz | tar -xz
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/M1nu0x0/token-perf/releases/latest/download/token-perf-installer.sh | sh
 ```
 
-That leaves a `token-perf` binary in the current directory; move it somewhere on your `PATH`.
-Each archive ships a `.sha256` next to it.
+On Windows, in PowerShell:
+
+```powershell
+irm https://github.com/M1nu0x0/token-perf/releases/latest/download/token-perf-installer.ps1 | iex
+```
+
+Either script needs no toolchain. Both install into `$CARGO_HOME/bin` (`~/.cargo/bin` by default)
+and append that directory to your shell rc, so open a new shell — or source the rc — before
+`token-perf` is on your `PATH`.
+
+To download an archive by hand instead, pick your platform from the
+[latest release](https://github.com/M1nu0x0/token-perf/releases/latest):
+`token-perf-aarch64-apple-darwin.tar.xz`, `-x86_64-apple-darwin.tar.xz`,
+`-x86_64-unknown-linux-gnu.tar.xz`, `-aarch64-unknown-linux-gnu.tar.xz`, or
+`token-perf-x86_64-pc-windows-msvc.zip`. Each unpacks to a directory holding the `token-perf`
+binary, and each ships a `.sha256` next to it:
+
+```sh
+shasum -a 256 -c token-perf-aarch64-apple-darwin.tar.xz.sha256
+```
+
+Homebrew: coming soon.
+
+An install made by either script can update itself:
+
+```sh
+token-perf upgrade          # --check only reports whether a newer release exists
+```
+
+Any other install (an archive you unpacked, a package manager, `cargo install`) has no install
+receipt, so `upgrade` says so and changes nothing.
+
+Building from source is under [Build](#build).
 
 ## Usage
 
