@@ -3,6 +3,7 @@ mod table;
 
 use std::cmp::Reverse;
 
+use axoupdater::AxoUpdater;
 use clap::{Parser, Subcommand};
 use rust_i18n::t;
 use table::Align;
@@ -73,6 +74,11 @@ enum Command {
         port: Option<u16>,
         #[arg(long, help = h("help.no_open"))]
         no_open: bool,
+    },
+    #[command(about = h("help.upgrade"))]
+    Upgrade {
+        #[arg(long, help = h("help.upgrade_check"))]
+        check: bool,
     },
     #[command(about = h("help.config"))]
     Config {
@@ -182,6 +188,48 @@ fn in_range(started_at: &str, since: Option<&str>, until: Option<&str>) -> bool 
     since.is_none_or(|s| day >= s) && until.is_none_or(|u| day <= u)
 }
 
+/// Only an install by the shell/powershell installer leaves a receipt. Every other
+/// path here (archive, brew, cargo install) has nothing to update against, so the
+/// receipt doubles as the "was this self-updatable" test.
+fn load_updater(app: &str) -> Result<AxoUpdater, String> {
+    let mut updater = AxoUpdater::new_for(app);
+    // The cause is kept: "no receipt" is the common case, but a receipt that is
+    // present and unreadable lands here too and is otherwise undebuggable.
+    updater
+        .load_receipt()
+        .map_err(|e| format!("{}\n({e})", t!("upgrade_no_receipt")))?;
+    Ok(updater)
+}
+
+fn upgrade(check: bool) -> ! {
+    let mut updater = match load_updater("token-perf") {
+        Ok(updater) => updater,
+        Err(message) => {
+            eprintln!("{message}");
+            std::process::exit(1);
+        }
+    };
+    let outcome = if check {
+        updater.is_update_needed_sync().map(|needed| match needed {
+            true => t!("upgrade_available").to_string(),
+            false => t!("upgrade_current").to_string(),
+        })
+    } else {
+        updater.run_sync().map(|result| match result {
+            Some(done) => t!("upgrade_done", version = done.new_version).to_string(),
+            None => t!("upgrade_current").to_string(),
+        })
+    };
+    match outcome {
+        Ok(message) => println!("{message}"),
+        Err(e) => {
+            eprintln!("{}", t!("upgrade_failed", error = e));
+            std::process::exit(1);
+        }
+    }
+    std::process::exit(0);
+}
+
 fn main() {
     // Before parsing, so --help comes out in the user's language.
     let argv_lang = lang::argv_lang(std::env::args());
@@ -195,6 +243,11 @@ fn main() {
     ));
 
     let cli = Cli::parse();
+    // Before sync_and_load: upgrading needs no transcripts, so this skips the
+    // transcript scan, which is the slowest thing this binary does.
+    if let Command::Upgrade { check } = cli.command {
+        upgrade(check);
+    }
     let (flag, unknown) = lang::split_lang_flag(cli.lang.as_deref());
 
     let json = cli.json;
@@ -678,6 +731,8 @@ fn main() {
         #[cfg(feature = "serve")]
         Command::Serve { port, no_open } => serve(sessions, lang, port.unwrap_or(0), !no_open),
 
+        // Handled before the store was even opened.
+        Command::Upgrade { .. } => unreachable!(),
         Command::Config { .. } => {
             println!("lang    {lang}");
             println!("pretty  {}", if pretty { "on" } else { "off" });

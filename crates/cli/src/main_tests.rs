@@ -110,3 +110,13 @@ fn top_keeps_the_biggest_spikes_but_shows_them_in_call_order() {
     assert!(top_spikes(&[0, 0, 0], 3).is_empty(), "a zero never spikes");
     assert!(top_spikes(&[], 3).is_empty());
 }
+
+#[test]
+fn an_install_with_no_receipt_gets_a_message_not_an_error() {
+    // Nothing was ever installed under this name, so no receipt can exist —
+    // the same branch a brew or `cargo install` user lands on.
+    let Err(message) = super::load_updater("token-perf-no-such-app") else {
+        panic!("no receipt can exist under that name");
+    };
+    assert!(!message.is_empty());
+}

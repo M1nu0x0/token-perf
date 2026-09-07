@@ -31,6 +31,11 @@ summary_length: "The longer the conversation, the more often you buy the same to
 summary_tools: "What made it big (share of everything tools pushed into the conversation)"
 summary_top_sessions: "The most expensive conversations"
 summary_solo: "%{pct}% of the messages that used a tool called exactly one. Calling several at once cuts the round trips, and fewer round trips means less re-reading."
+upgrade_no_receipt: "This install cannot update itself; only installs made by the installer script can. Reinstall with the script, or use your package manager."
+upgrade_current: "Already on the latest version."
+upgrade_available: "A newer version is available. Run 'token-perf upgrade' to install it."
+upgrade_done: "Updated to %{version}."
+upgrade_failed: "Could not update: %{error}"
 
 cost_line: "Cost     %{cost}  (Anthropic list price; subagents not included)"
 summary_cost: "At list price that is %{cost}."
@@ -56,3 +61,5 @@ help:
   pretty: "Draw tables with Unicode borders instead of plain aligned columns (on/off)"
   json: "Print the result as JSON instead of tables"
   cost: "Add a dollar column, priced at Anthropic list rates per model"
+  upgrade: "Update to the latest release (installer-script installs only)"
+  upgrade_check: "Only report whether a newer version exists"
