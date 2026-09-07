@@ -65,7 +65,9 @@ token-perf sessions --cost    # add a dollar column at Anthropic list price (als
 ```
 
 When working on the UI, leave `token-perf serve --port 5177` running and use `cd web && npm run dev` —
-the vite dev server proxies `/api` to 5177.
+the vite dev server proxies `/api` to 5177. Styling is Tailwind CSS v4 through `@tailwindcss/vite`,
+with every color and font token defined once in `web/src/app.css`; the build chain is unchanged
+(`npm run build` still writes `web/dist`, which is what gets embedded).
 
 A subagent is one tool call of its parent, so its tokens are part of the parent's bill. `sessions`
 puts them in a `SUB_RD` column and ranks by the two together, `summary` charges them to the parent's
