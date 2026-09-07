@@ -46,6 +46,11 @@ enum Command {
         top: usize,
         #[arg(long, help = h("help.sessions_all"))]
         all: bool,
+        // Values start with '-' for ascending, so they must not read as flags.
+        #[arg(long, allow_hyphen_values = true, value_parser = parse_sort, help = h("help.sessions_sort"))]
+        sort: Option<Sort>,
+        #[arg(long, help = h("help.sessions_grep"))]
+        grep: Option<String>,
     },
     #[command(about = h("help.report"))]
     Report {
@@ -74,6 +79,85 @@ enum Command {
         #[arg(long, value_parser = clap::builder::BoolishValueParser::new(), help = h("help.pretty"))]
         pretty: Option<bool>,
     },
+}
+
+#[derive(Clone, Copy, PartialEq, Debug)]
+enum SortField {
+    Date,
+    Calls,
+    CacheRead,
+    SubRead,
+    Output,
+    Cost,
+}
+
+#[derive(Clone, PartialEq, Debug)]
+struct Sort {
+    field: SortField,
+    asc: bool,
+}
+
+/// Same field names and `-` prefix as the web table's sort links.
+fn parse_sort(value: &str) -> Result<Sort, String> {
+    let (asc, name) = match value.strip_prefix('-') {
+        Some(rest) => (true, rest),
+        None => (false, value),
+    };
+    let field = match name {
+        "date" => SortField::Date,
+        "calls" => SortField::Calls,
+        "cache_read" => SortField::CacheRead,
+        "sub_read" => SortField::SubRead,
+        "output" => SortField::Output,
+        "cost" => SortField::Cost,
+        _ => return Err(t!("bad_sort", value = name).to_string()),
+    };
+    Ok(Sort { field, asc })
+}
+
+fn sort_reports(reports: &mut [analyze::Report], sort: &Sort) {
+    // An unpriced session sorts below every priced one, as it does on the web.
+    let cost = |r: &analyze::Report| pricing::sum([r.cost, r.subagents.cost]).unwrap_or(-1.0);
+    let by = |a: &analyze::Report, b: &analyze::Report| match sort.field {
+        SortField::Date => a.started_at.cmp(&b.started_at),
+        SortField::Calls => a.call_count.cmp(&b.call_count),
+        SortField::CacheRead => a.totals.cache_read.cmp(&b.totals.cache_read),
+        SortField::SubRead => a
+            .subagents
+            .totals
+            .cache_read
+            .cmp(&b.subagents.totals.cache_read),
+        SortField::Output => a.totals.output.cmp(&b.totals.output),
+        SortField::Cost => cost(a).total_cmp(&cost(b)),
+    };
+    reports.sort_by(|a, b| if sort.asc { by(a, b) } else { by(b, a) });
+}
+
+/// Title, project and id searched as one string, exactly like the web search box.
+fn matches_grep(fields: [&str; 3], query: &str) -> bool {
+    fields.join(" ").to_lowercase().contains(&query.to_lowercase())
+}
+
+/// The 10% of calls that grew the context most: the cut is the 10th-from-the-top
+/// value, the same one the web growth chart marks with dots.
+fn spike_cut(grew: &[u64]) -> u64 {
+    let mut sorted = grew.to_vec();
+    sorted.sort_unstable_by(|a, b| b.cmp(a));
+    let rank = (sorted.len() as f64 * 0.1).ceil() as usize;
+    sorted.get(rank.saturating_sub(1)).copied().unwrap_or(0)
+}
+
+/// Positions of the spikes to show: `--top` cuts the smallest ones, never the
+/// late ones, and what is left goes back in call order like the web curve.
+fn top_spikes(grew: &[u64], top: usize) -> Vec<usize> {
+    let cut = spike_cut(grew);
+    let mut picked: Vec<usize> = (0..grew.len())
+        .filter(|&i| grew[i] > 0 && grew[i] >= cut)
+        .collect();
+    picked.sort_by_key(|&i| Reverse(grew[i]));
+    picked.truncate(top);
+    picked.sort_unstable();
+    picked
 }
 
 /// Format only: month and day ranges, not whether the day exists in that month.
@@ -157,13 +241,25 @@ fn main() {
     let pretty = table::apply_pretty(&store, pretty_flag);
 
     match cli.command {
-        Command::Sessions { top, all } => {
+        Command::Sessions {
+            top,
+            all,
+            sort,
+            grep,
+        } => {
             let mut reports: Vec<_> = sessions
                 .iter()
                 .filter(|s| all || s.parent.is_none())
                 .map(|s| analyze::rollup(s, &sessions))
                 .collect();
-            reports.sort_by_key(|r| Reverse(r.totals.cache_read + r.subagents.totals.cache_read));
+            if let Some(query) = &grep {
+                reports.retain(|r| matches_grep([&r.title, &r.project, &r.session], query));
+            }
+            match &sort {
+                Some(sort) => sort_reports(&mut reports, sort),
+                None => reports
+                    .sort_by_key(|r| Reverse(r.totals.cache_read + r.subagents.totals.cache_read)),
+            }
             if json {
                 return emit_json(&reports[..reports.len().min(top)]);
             }
@@ -371,23 +467,26 @@ fn main() {
                     .iter()
                     .take(top)
                     .map(|c| {
-                        vec![
+                        let mut row = vec![
                             short(&c.session).to_string(),
                             c.call_count.to_string(),
                             human(c.totals.cache_read),
                             human(c.residual),
-                            c.agent_type.clone().unwrap_or_else(|| subagent.to_string()),
-                        ]
+                        ];
+                        if show_cost {
+                            row.push(dollars(c.cost));
+                        }
+                        row.push(c.agent_type.clone().unwrap_or_else(|| subagent.to_string()));
+                        row
                     })
                     .collect();
-                table::print_table(
-                    pretty,
-                    "  ",
-                    &["ID", "CALLS", "CACHE_RD", "RESIDUAL", "AGENT"],
-                    &[Align::Left, Align::Right, Align::Right, Align::Right],
-                    &child_rows,
-                    true,
-                );
+                let mut headers = vec!["ID", "CALLS", "CACHE_RD", "RESIDUAL", "AGENT"];
+                let mut aligns = vec![Align::Left, Align::Right, Align::Right, Align::Right];
+                if show_cost {
+                    headers.insert(4, "COST");
+                    aligns.push(Align::Right);
+                }
+                table::print_table(pretty, "  ", &headers, &aligns, &child_rows, true);
                 println!();
             }
 
@@ -440,6 +539,30 @@ fn main() {
                 &["CALL", "CONTEXT", "GREW", "RESIDUAL", "TOOLS"],
                 &[Align::Left, Align::Right, Align::Right, Align::Right],
                 &call_rows,
+                true,
+            );
+            println!();
+
+            println!("{}", t!("spike_calls"));
+            let grew: Vec<u64> = r.calls.iter().map(|c| c.grew_by).collect();
+            let spike_rows: Vec<Vec<String>> = top_spikes(&grew, top)
+                .into_iter()
+                .map(|i| &r.calls[i])
+                .map(|c| {
+                    vec![
+                        c.index.to_string(),
+                        human(c.grew_by),
+                        human(c.context),
+                        c.tools.join(", "),
+                    ]
+                })
+                .collect();
+            table::print_table(
+                pretty,
+                "  ",
+                &["CALL", "GREW", "CONTEXT", "TOOLS"],
+                &[Align::Left, Align::Right, Align::Right],
+                &spike_rows,
                 true,
             );
         }
