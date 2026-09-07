@@ -62,7 +62,7 @@ async fn report(State(app): Sessions, Path(id): Path<String>) -> Response {
     }
 }
 
-async fn static_asset(uri: Uri) -> Response {
+async fn static_asset(State(app): Sessions, uri: Uri) -> Response {
     let path = uri.path().trim_start_matches('/');
     // Serving index.html for a missing API path makes the frontend parse HTML as JSON.
     if path.starts_with("api/") {
@@ -81,7 +81,22 @@ async fn static_asset(uri: Uri) -> Response {
             .into_response();
     };
 
+    // index.html ships one hardcoded `lang`; the served language is config's.
+    if name == "index.html" {
+        let html = localize(&String::from_utf8_lossy(&file.data), &app.lang);
+        return ([(header::CONTENT_TYPE, content_type(name))], html).into_response();
+    }
     ([(header::CONTENT_TYPE, content_type(name))], file.data).into_response()
+}
+
+/// `lang` comes from the user (`--lang`, env), so it reaches an HTML attribute
+/// only when it is a bare two-letter code; anything else leaves the page as is.
+fn localize(html: &str, lang: &str) -> String {
+    if lang.len() == 2 && lang.bytes().all(|b| b.is_ascii_lowercase()) {
+        html.replace("lang=\"ko\"", &format!("lang=\"{lang}\""))
+    } else {
+        html.to_string()
+    }
 }
 
 fn content_type(name: &str) -> &'static str {

@@ -23,3 +23,17 @@ fn ui_is_built() {
         "web/dist is empty. Run `npm run build` in web/ first."
     );
 }
+
+#[test]
+fn index_html_gets_the_configured_lang() {
+    let page = r#"<html lang="ko"><body></body></html>"#;
+
+    assert_eq!(
+        super::localize(page, "en"),
+        r#"<html lang="en"><body></body></html>"#
+    );
+    assert_eq!(super::localize(page, "ko"), page);
+    // `lang` is user input: anything but a bare two-letter code is not injected.
+    assert_eq!(super::localize(page, "en\" onload=\"x"), page);
+    assert_eq!(super::localize(page, "EN"), page);
+}
