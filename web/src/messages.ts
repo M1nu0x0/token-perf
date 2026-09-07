@@ -13,6 +13,7 @@ const en = {
   lengthCompare: (short: string, long: string) =>
     ` Short conversations buy it back ${short} times, long ones <b>${long} times</b>.`,
   times: (n: string) => `${n}x`,
+  multiplier: (n: string) => `${n}x`,
   bucket: ({ min, max }: Bucket) =>
     max === null ? `${min}+ calls` : min === 0 ? `${max} calls or fewer` : `${min}–${max} calls`,
   culpritHeading: 'What made it big',
@@ -81,6 +82,7 @@ const ko: typeof en = {
   lengthCompare: (short, long) =>
     ` 짧은 대화는 ${short}번, 긴 대화는 <b>${long}번</b> 다시 사는 셈이에요.`,
   times: (n) => `${n}번`,
+  multiplier: (n) => `${n}배`,
   bucket: ({ min, max }) =>
     max === null ? `${min}회 이상` : min === 0 ? `${max}회 이하` : `${min}~${max}회`,
   culpritHeading: '덩치를 키운 범인',

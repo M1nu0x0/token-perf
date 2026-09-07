@@ -48,7 +48,7 @@
       <div class="rounded-md border border-border bg-surface p-4">
         <div class="text-dim">{m.cardAmplification}</div>
         <div class="font-mono text-4xl font-bold tracking-tight tabular-nums">
-          {long?.sessions ? m.times(long.ratio.toFixed(1)) : '—'}
+          {long?.sessions ? m.multiplier(long.ratio.toFixed(1)) : '—'}
         </div>
         <div class="text-dim">{long ? m.bucket(long) : ''}</div>
       </div>
